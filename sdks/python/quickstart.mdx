@@ -1,0 +1,199 @@
+---
+title: Quickstart
+description: Get started with the Foil Python SDK
+---
+
+# Python SDK Quickstart
+
+Learn how to trace AI calls with the Foil Python SDK.
+
+## Using the OpenAI Wrapper
+
+The easiest way to get started is with the OpenAI wrapper, which automatically traces all your API calls:
+
+```python
+from openai import OpenAI
+from foil import Foil
+import os
+
+# Initialize clients
+client = OpenAI()
+foil = Foil(api_key=os.environ['FOIL_API_KEY'])
+
+# Wrap the OpenAI client
+wrapped_client = foil.wrap_openai(client)
+
+# All calls are now automatically traced
+response = wrapped_client.chat.completions.create(
+    model='gpt-4o',
+    messages=[{'role': 'user', 'content': 'Hello!'}]
+)
+
+print(response.choices[0].message.content)
+```
+
+That's it! Every call through `wrapped_client` is automatically logged to Foil with:
+- Model name
+- Input messages
+- Output response
+- Token usage
+- Latency
+- Errors (if any)
+
+## Streaming Support
+
+Streaming responses work seamlessly:
+
+```python
+wrapped_client = foil.wrap_openai(client)
+
+stream = wrapped_client.chat.completions.create(
+    model='gpt-4o',
+    messages=[{'role': 'user', 'content': 'Write a haiku'}],
+    stream=True
+)
+
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end='', flush=True)
+
+# TTFT and full content are automatically captured
+```
+
+## Tool Calls
+
+Function/tool calls are automatically tracked:
+
+```python
+tools = [
+    {
+        'type': 'function',
+        'function': {
+            'name': 'get_weather',
+            'description': 'Get weather for a location',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'location': {'type': 'string'}
+                },
+                'required': ['location']
+            }
+        }
+    }
+]
+
+wrapped_client = foil.wrap_openai(client)
+
+response = wrapped_client.chat.completions.create(
+    model='gpt-4o',
+    messages=[{'role': 'user', 'content': 'What is the weather in Paris?'}],
+    tools=tools
+)
+
+# Tool calls are captured in the trace
+if response.choices[0].message.tool_calls:
+    for tool_call in response.choices[0].message.tool_calls:
+        print(f'Tool: {tool_call.function.name}')
+        print(f'Args: {tool_call.function.arguments}')
+```
+
+## Fire-and-Forget Logging
+
+For manual logging without the OpenAI wrapper:
+
+```python
+foil.log({
+    'model': 'gpt-4o',
+    'input': messages,
+    'output': response,
+    'latency': 1200,
+    'tokens': {
+        'prompt': 100,
+        'completion': 50,
+        'total': 150
+    },
+    'status': 'completed'
+})
+```
+
+This is non-blocking and doesn't wait for a response.
+
+## Complete Example
+
+```python
+from openai import OpenAI
+from foil import Foil
+import os
+
+def main():
+    # Initialize clients
+    client = OpenAI()
+    foil = Foil(api_key=os.environ['FOIL_API_KEY'])
+
+    # Wrap OpenAI client
+    wrapped_client = foil.wrap_openai(client)
+
+    # Chat application
+    messages = [
+        {'role': 'system', 'content': 'You are a helpful assistant.'}
+    ]
+
+    print('Chat with GPT-4o (type "quit" to exit)')
+
+    while True:
+        user_input = input('You: ')
+        if user_input.lower() == 'quit':
+            break
+
+        messages.append({'role': 'user', 'content': user_input})
+
+        # Automatically traced
+        response = wrapped_client.chat.completions.create(
+            model='gpt-4o',
+            messages=messages,
+            stream=True
+        )
+
+        print('Assistant: ', end='')
+        full_response = ''
+        for chunk in response:
+            if chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
+                print(content, end='', flush=True)
+                full_response += content
+        print()
+
+        messages.append({'role': 'assistant', 'content': full_response})
+
+if __name__ == '__main__':
+    main()
+```
+
+## Error Handling
+
+Errors are automatically captured:
+
+```python
+wrapped_client = foil.wrap_openai(client)
+
+try:
+    response = wrapped_client.chat.completions.create(
+        model='gpt-4o',
+        messages=[{'role': 'user', 'content': 'Hello'}]
+    )
+except Exception as e:
+    # Error is already recorded in Foil
+    print(f'Error: {e}')
+    raise
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="OpenAI Integration" icon="wand-magic-sparkles" href="/sdks/python/openai">
+    More OpenAI features
+  </Card>
+  <Card title="Concepts: Traces" icon="diagram-project" href="/concepts/traces">
+    Learn about distributed tracing
+  </Card>
+</CardGroup>

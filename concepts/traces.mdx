@@ -1,0 +1,206 @@
+---
+title: Traces
+description: Understanding distributed tracing in Foil
+---
+
+# Traces
+
+A **trace** represents a complete unit of work in your AI application - like handling a user request, processing a document, or running an agent workflow.
+
+## What is a Trace?
+
+Think of a trace as a timeline that captures everything that happens when your AI system processes a request:
+
+```
+User asks: "What's the weather in Paris?"
+
+Trace Timeline:
+├─ Agent receives query (0ms)
+├─ LLM plans next action (200ms)
+├─ Tool: weather_api called (400ms)
+├─ Tool returns result (800ms)
+├─ LLM generates response (1000ms)
+└─ Response sent to user (1200ms)
+```
+
+Each step in this timeline is a **span**. Together, all spans form the complete trace.
+
+## Trace Structure
+
+Every trace has:
+
+| Property | Description |
+|----------|-------------|
+| `traceId` | Unique identifier (UUID) |
+| `name` | Human-readable name (optional) |
+| `startTime` | When the trace began |
+| `endTime` | When the trace completed |
+| `duration` | Total time in milliseconds |
+| `status` | 'completed', 'error', or 'running' |
+| `spans` | Array of child spans |
+
+## Creating Traces
+
+<Tabs>
+  <Tab title="JavaScript">
+    ```javascript
+    import { createFoilTracer } from '@foil-ai/sdk';
+
+    const tracer = createFoilTracer({
+      apiKey: process.env.FOIL_API_KEY,
+      agentName: 'my-agent'
+    });
+
+    // Automatic trace creation
+    await tracer.trace(async (ctx) => {
+      // ctx.traceId is automatically generated
+      console.log('Trace ID:', ctx.traceId);
+
+      // All work here is part of this trace
+    }, { name: 'process-request' });
+
+    // Custom trace ID
+    await tracer.trace(async (ctx) => {
+      // Your work here
+    }, {
+      name: 'custom-trace',
+      traceId: 'my-custom-trace-id'
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from openai import OpenAI
+    from foil import Foil
+
+    client = OpenAI()
+    foil = Foil(api_key=os.environ['FOIL_API_KEY'])
+
+    # Wrap OpenAI client - traces are created automatically
+    wrapped_client = foil.wrap_openai(client)
+
+    # Each call is automatically traced
+    response = wrapped_client.chat.completions.create(
+        model='gpt-4o',
+        messages=[{'role': 'user', 'content': 'Hello!'}]
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Trace Hierarchy
+
+Traces contain spans organized in a tree structure:
+
+```
+Trace: customer-support-request
+│
+├── Span: agent (root)
+│   │
+│   ├── Span: llm (classify-intent)
+│   │   └── Model: gpt-4o, Duration: 450ms
+│   │
+│   ├── Span: retriever (search-knowledge-base)
+│   │   └── Documents: 5 retrieved
+│   │
+│   └── Span: llm (generate-response)
+│       └── Model: gpt-4o, Duration: 800ms
+│
+└── Total Duration: 1450ms
+```
+
+## Linking Related Work
+
+Use `traceId` to connect related operations:
+
+```javascript
+// All these operations share the same trace
+await tracer.trace(async (ctx) => {
+  // First LLM call
+  const plan = await ctx.llm('gpt-4o', ...);
+
+  // Tool execution
+  const results = await ctx.tool('search', ...);
+
+  // Second LLM call
+  const response = await ctx.llm('gpt-4o', ...);
+
+  // Everything linked by ctx.traceId
+});
+```
+
+## Trace Context
+
+Pass trace context across service boundaries:
+
+```javascript
+// Service A - Start trace
+await tracer.trace(async (ctx) => {
+  // Call Service B with trace context
+  await fetch('https://service-b/api', {
+    headers: {
+      'x-trace-id': ctx.traceId,
+      'x-parent-span-id': ctx.currentParentEventId
+    }
+  });
+});
+
+// Service B - Continue trace
+app.post('/api', async (req, res) => {
+  const traceId = req.headers['x-trace-id'];
+  const parentSpanId = req.headers['x-parent-span-id'];
+
+  await tracer.trace(async (ctx) => {
+    // This trace links to Service A's trace
+  }, { traceId, parentSpanId });
+});
+```
+
+## Viewing Traces
+
+In the Foil dashboard, traces show:
+
+1. **Timeline View** - Visual representation of all spans
+2. **Span Details** - Click any span to see inputs/outputs
+3. **Token Usage** - Total and per-span token counts
+4. **Errors** - Any failures highlighted in red
+5. **Alerts** - Quality issues detected by Foil
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="One trace per user request">
+    Create a new trace for each distinct user interaction. Don't reuse trace IDs across requests.
+  </Accordion>
+
+  <Accordion title="Name traces descriptively">
+    Use names that describe the workflow: `process-customer-query`, `generate-report`, `analyze-document`.
+  </Accordion>
+
+  <Accordion title="Include conversation IDs">
+    For chat applications, include a `convoId` to group traces from the same conversation.
+    ```javascript
+    await tracer.trace(async (ctx) => {
+      // ...
+    }, {
+      name: 'chat-message',
+      convoId: sessionId  // Links all messages in this chat
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Don't over-nest">
+    Keep span depth reasonable (typically 3-5 levels max). Deep nesting makes traces hard to read.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Spans" icon="diagram-project" href="/concepts/spans">
+    Learn about span types
+  </Card>
+  <Card title="Signals" icon="signal" href="/concepts/signals">
+    Add feedback to traces
+  </Card>
+</CardGroup>

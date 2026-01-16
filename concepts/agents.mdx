@@ -1,0 +1,254 @@
+---
+title: Agents
+description: Organize and monitor AI agents in Foil
+---
+
+# Agents
+
+An **agent** in Foil represents a distinct AI component or workflow in your application. Use agents to organize traces, configure alerts, and view metrics by logical unit.
+
+## What is an Agent?
+
+An agent could be:
+- A customer support chatbot
+- A code review assistant
+- A document analyzer
+- A research agent
+- Any distinct AI-powered feature
+
+Each agent has its own:
+- Trace history
+- Alert configuration
+- Analytics dashboard
+- Performance metrics
+
+## Creating Agents
+
+Agents are created automatically when you specify an `agentName`:
+
+```javascript
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'customer-support'  // Creates agent if it doesn't exist
+});
+```
+
+Or create explicitly via API:
+
+```bash
+POST /api/agents
+{
+  "name": "customer-support",
+  "description": "Handles customer inquiries"
+}
+```
+
+## Agent Configuration
+
+### In the Dashboard
+
+Configure agents in the Foil dashboard under **Agents**:
+
+1. **Name & Description** - Identify the agent
+2. **Alert Settings** - Enable/disable alert types
+3. **Thresholds** - Set custom thresholds for this agent
+4. **Notification Contacts** - Who gets alerted
+
+### Via API
+
+```bash
+PUT /api/agents/:agentId/alerts
+{
+  "llmAnalysis": {
+    "enabled": true,
+    "alertTypes": {
+      "hallucination": {
+        "enabled": true,
+        "threshold": 0.7,
+        "severity": "high",
+        "channels": ["email", "sms"]
+      },
+      "quality": {
+        "enabled": true,
+        "threshold": 0.6,
+        "severity": "warning"
+      }
+    }
+  },
+  "contacts": {
+    "email": [
+      { "address": "alerts@company.com", "enabled": true }
+    ]
+  }
+}
+```
+
+## Agent Metrics
+
+Each agent tracks:
+
+| Metric | Description |
+|--------|-------------|
+| Request count | Total traces processed |
+| Success rate | Percentage of successful completions |
+| Error rate | Percentage of failed traces |
+| Avg latency | Mean response time |
+| P95 latency | 95th percentile response time |
+| Token usage | Total tokens consumed |
+| Cost | Estimated API costs |
+
+## Organizing by Agent
+
+### Single Application, Multiple Agents
+
+```javascript
+// Customer support agent
+const supportTracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'customer-support'
+});
+
+// Code review agent
+const codeReviewTracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'code-review'
+});
+
+// Research agent
+const researchTracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'research'
+});
+```
+
+### Environment-Based Naming
+
+```javascript
+const agentName = `customer-support-${process.env.NODE_ENV}`;
+
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName  // e.g., 'customer-support-production'
+});
+```
+
+### Version Tracking
+
+```javascript
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'customer-support'
+});
+
+await tracer.trace(async (ctx) => {
+  // ...
+}, {
+  properties: {
+    agentVersion: '2.1.0',
+    promptVersion: 'v3'
+  }
+});
+```
+
+## Agent Versioning
+
+Foil tracks agent versions automatically:
+
+```bash
+GET /api/agents/:agentId/versions
+
+[
+  {
+    "version": 3,
+    "createdAt": "2024-01-15T10:00:00Z",
+    "changes": { "alertSettings": {...} }
+  },
+  {
+    "version": 2,
+    "createdAt": "2024-01-10T10:00:00Z",
+    "changes": { "description": "Updated" }
+  }
+]
+```
+
+## Filtering by Agent
+
+### Dashboard
+
+Use the agent dropdown to filter:
+- Traces
+- Alerts
+- Analytics
+- Signals
+
+### API
+
+```bash
+# Get traces for specific agent
+GET /api/spans/traces?agentId=agent-123
+
+# Get alerts for specific agent
+GET /api/spans/alerts?agentId=agent-123
+
+# Get analytics for specific agent
+GET /api/analytics/metrics?agentId=agent-123
+```
+
+## Multi-Agent Workflows
+
+When agents collaborate, link them via traces:
+
+```javascript
+// Orchestrator agent
+const orchestrator = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'orchestrator'
+});
+
+await orchestrator.trace(async (ctx) => {
+  // Delegate to research agent
+  const researchSpan = await ctx.startSpan(SpanKind.AGENT, 'research-agent', {
+    properties: { delegatedAgent: 'research' }
+  });
+
+  // Research agent does its work
+  const findings = await callResearchAgent(query, ctx.traceId);
+
+  await researchSpan.end({ output: findings });
+
+  // Continue with findings...
+});
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive agent names">
+    Names should clearly identify the agent's purpose:
+    - `customer-support` not `agent1`
+    - `code-review-assistant` not `cra`
+  </Accordion>
+
+  <Accordion title="One agent per logical function">
+    Don't mix different functionalities in one agent. Create separate agents for distinct workflows.
+  </Accordion>
+
+  <Accordion title="Configure alerts per agent">
+    Different agents may need different alert thresholds. A code review agent might tolerate higher latency than a chatbot.
+  </Accordion>
+
+  <Accordion title="Track versions in properties">
+    Include version information in trace properties to correlate performance with deployments.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Alerting" icon="bell" href="/features/alerting">
+    Configure agent alerts
+  </Card>
+  <Card title="Analytics" icon="chart-line" href="/features/analytics">
+    View agent metrics
+  </Card>
+</CardGroup>

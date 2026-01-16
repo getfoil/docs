@@ -1,0 +1,294 @@
+---
+title: Spans
+description: Understanding spans and span types in Foil
+---
+
+# Spans
+
+A **span** represents a single operation within a trace - like an LLM call, tool execution, or retrieval step.
+
+## Span Structure
+
+Every span contains:
+
+| Property | Description |
+|----------|-------------|
+| `spanId` | Unique identifier |
+| `traceId` | Parent trace identifier |
+| `parentSpanId` | Parent span (for nesting) |
+| `spanKind` | Type of operation |
+| `name` | Operation name (e.g., model name, tool name) |
+| `startTime` | When operation began |
+| `endTime` | When operation completed |
+| `durationMs` | Duration in milliseconds |
+| `input` | Input data |
+| `output` | Output data |
+| `status` | 'completed' or 'error' |
+| `tokens` | Token usage (for LLM spans) |
+| `error` | Error message (if failed) |
+
+## Span Types
+
+Foil supports several span types to categorize different operations:
+
+### LLM Span
+
+For language model API calls:
+
+```javascript
+const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
+  input: messages
+});
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages
+});
+
+await span.end({
+  output: response.choices[0].message.content,
+  tokens: {
+    prompt: response.usage.prompt_tokens,
+    completion: response.usage.completion_tokens,
+    total: response.usage.total_tokens
+  }
+});
+```
+
+**Captured data**: Model, messages, response, tokens, latency, TTFT
+
+### Tool Span
+
+For function/tool executions:
+
+```javascript
+await ctx.tool('web-search', async () => {
+  return await searchAPI(query);
+}, {
+  input: { query }
+});
+```
+
+**Captured data**: Tool name, arguments, result, duration, errors
+
+### Agent Span
+
+For high-level agent orchestration:
+
+```javascript
+const agentSpan = await ctx.startSpan(SpanKind.AGENT, 'research-agent', {
+  input: { task: 'Research topic X' }
+});
+
+// Agent does multiple sub-operations...
+
+await agentSpan.end({
+  output: { findings: [...] }
+});
+```
+
+**Captured data**: Agent name, task, sub-spans, final output
+
+### Retriever Span
+
+For RAG retrieval operations:
+
+```javascript
+await ctx.retriever('vector-db', async () => {
+  return await vectorStore.similaritySearch(query, 5);
+}, {
+  input: { query }
+});
+```
+
+**Captured data**: Query, retrieved documents, scores, latency
+
+### Embedding Span
+
+For embedding generation:
+
+```javascript
+await ctx.embedding('text-embedding-3-small', async () => {
+  return await createEmbeddings(texts);
+}, {
+  input: { textCount: texts.length }
+});
+```
+
+**Captured data**: Model, input count, vector dimensions
+
+### Chain Span
+
+For pipeline/chain steps:
+
+```javascript
+const chainSpan = await ctx.startSpan(SpanKind.CHAIN, 'rag-pipeline');
+
+// Multiple operations in sequence...
+
+await chainSpan.end({ output: finalResult });
+```
+
+### Custom Span
+
+For any other operation:
+
+```javascript
+await ctx.wrapInSpan(SpanKind.CUSTOM, 'post-processing', async () => {
+  return await customOperation(data);
+});
+```
+
+## Span Nesting
+
+Spans automatically form a hierarchy:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  // Root span (depth: 0)
+  const agentSpan = await ctx.startSpan(SpanKind.AGENT, 'orchestrator');
+
+  // Child spans (depth: 1)
+  const planSpan = await ctx.startSpan(SpanKind.LLM, 'gpt-4o');
+  await planSpan.end({ output: plan });
+
+  // Another child
+  const toolSpan = await ctx.startSpan(SpanKind.TOOL, 'search');
+
+  // Grandchild span (depth: 2)
+  const apiSpan = await ctx.startSpan(SpanKind.CUSTOM, 'api-call');
+  await apiSpan.end({ output: results });
+
+  await toolSpan.end({ output: results });
+  await agentSpan.end({ output: 'done' });
+});
+```
+
+Resulting hierarchy:
+```
+agent: orchestrator (depth: 0)
+├── llm: gpt-4o (depth: 1)
+└── tool: search (depth: 1)
+    └── custom: api-call (depth: 2)
+```
+
+## Recording Data
+
+### Input
+
+Record what goes into the operation:
+
+```javascript
+await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
+  input: {
+    messages: [...],
+    temperature: 0.7,
+    maxTokens: 1000
+  }
+});
+```
+
+### Output
+
+Record what comes out:
+
+```javascript
+await span.end({
+  output: {
+    content: response.text,
+    finishReason: 'stop'
+  }
+});
+```
+
+### Tokens
+
+For LLM spans, always record token usage:
+
+```javascript
+await span.end({
+  tokens: {
+    prompt: 150,
+    completion: 50,
+    total: 200
+  }
+});
+```
+
+### Timing
+
+Record timing metrics:
+
+```javascript
+await span.end({
+  timing: {
+    totalDuration: 1200,  // ms
+    ttft: 300             // time to first token
+  }
+});
+```
+
+### Errors
+
+Record failures:
+
+```javascript
+try {
+  // operation
+} catch (error) {
+  await span.end({
+    error: error.message,
+    status: 'error'
+  });
+}
+```
+
+## Custom Properties
+
+Add metadata for filtering and analysis:
+
+```javascript
+await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
+  properties: {
+    userId: 'user-123',
+    feature: 'chat',
+    promptVersion: '2.0',
+    experimentGroup: 'treatment'
+  }
+});
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use appropriate span types">
+    Choose the span type that best represents the operation. This enables better filtering and analytics.
+  </Accordion>
+
+  <Accordion title="Always record tokens for LLM spans">
+    Token counts are essential for cost tracking and optimization.
+  </Accordion>
+
+  <Accordion title="Include meaningful inputs/outputs">
+    Record enough context to debug issues, but be mindful of data size.
+  </Accordion>
+
+  <Accordion title="End spans properly">
+    Always call `span.end()` even on errors. Use try/finally or `wrapInSpan` for automatic handling.
+  </Accordion>
+
+  <Accordion title="Keep span names consistent">
+    Use consistent naming (model names, tool names) to enable aggregation.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Signals" icon="signal" href="/concepts/signals">
+    Add feedback and metrics
+  </Card>
+  <Card title="Alerting" icon="bell" href="/features/alerting">
+    Get notified on issues
+  </Card>
+</CardGroup>

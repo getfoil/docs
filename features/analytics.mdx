@@ -1,0 +1,279 @@
+---
+title: Analytics
+description: Monitor AI performance with Foil analytics
+---
+
+# Analytics
+
+Foil provides comprehensive analytics to understand your AI application's performance, costs, and quality.
+
+## Dashboard Overview
+
+The main dashboard shows key metrics at a glance:
+
+| Metric | Description |
+|--------|-------------|
+| **Total Requests** | Number of traces in the time period |
+| **Success Rate** | Percentage of successful completions |
+| **Avg Latency** | Mean response time |
+| **Active Agents** | Agents with recent activity |
+| **Alert Count** | Active alerts requiring attention |
+
+## Time-Series Charts
+
+### Requests Over Time
+
+Track request volume with agent breakdown:
+
+```bash
+GET /api/analytics/traces/requests-over-time?startDate=2024-01-01&endDate=2024-01-31&granularity=daily
+```
+
+Response:
+```json
+{
+  "data": [
+    {
+      "date": "2024-01-01",
+      "total": 1250,
+      "byAgent": {
+        "customer-support": 800,
+        "code-review": 450
+      }
+    }
+  ]
+}
+```
+
+### Success/Failure Rates
+
+Monitor error trends:
+
+```bash
+GET /api/analytics/traces/success-failure?startDate=2024-01-01&endDate=2024-01-31
+```
+
+### Latency Distribution
+
+Understand response time patterns:
+
+```bash
+GET /api/analytics/traces/latency-distribution?startDate=2024-01-01&endDate=2024-01-31
+```
+
+Returns buckets:
+- < 200ms
+- 200-500ms
+- 500ms-1s
+- 1-2s
+- 2-5s
+- > 5s
+
+### Latency Percentiles
+
+Track p50, p95, p99 over time:
+
+```bash
+GET /api/analytics/traces/latency-percentiles?granularity=hourly
+```
+
+## Token & Cost Analytics
+
+### Token Usage
+
+Monitor input/output token consumption:
+
+```bash
+GET /api/analytics/traces/token-usage?startDate=2024-01-01&endDate=2024-01-31&granularity=daily
+```
+
+Response:
+```json
+{
+  "data": [
+    {
+      "date": "2024-01-01",
+      "inputTokens": 1250000,
+      "outputTokens": 450000,
+      "totalTokens": 1700000
+    }
+  ]
+}
+```
+
+### Cost Breakdown
+
+View costs by model:
+
+```bash
+GET /api/analytics/costs?startDate=2024-01-01&endDate=2024-01-31
+```
+
+Response:
+```json
+{
+  "totalCost": 125.50,
+  "byModel": {
+    "gpt-4o": 95.00,
+    "gpt-4o-mini": 25.50,
+    "text-embedding-3-small": 5.00
+  },
+  "trend": [
+    { "date": "2024-01-01", "cost": 4.25 }
+  ]
+}
+```
+
+## Error Analytics
+
+### Errors by Type
+
+Understand what's failing:
+
+```bash
+GET /api/analytics/traces/errors-by-type?startDate=2024-01-01&endDate=2024-01-31
+```
+
+Response:
+```json
+{
+  "errors": [
+    { "type": "rate_limit", "count": 45, "percentage": 35 },
+    { "type": "timeout", "count": 30, "percentage": 23 },
+    { "type": "api_error", "count": 25, "percentage": 19 },
+    { "type": "validation", "count": 15, "percentage": 12 },
+    { "type": "other", "count": 14, "percentage": 11 }
+  ]
+}
+```
+
+### Error Rate Over Time
+
+Track error trends:
+
+```bash
+GET /api/analytics/traces/error-rate?granularity=hourly
+```
+
+## Tool Usage
+
+### Tool Usage Heatmap
+
+See which tools are used by which agents:
+
+```bash
+GET /api/analytics/traces/tool-usage?startDate=2024-01-01&endDate=2024-01-31
+```
+
+Response:
+```json
+{
+  "heatmap": {
+    "customer-support": {
+      "web-search": 450,
+      "calculator": 120,
+      "knowledge-base": 890
+    },
+    "code-review": {
+      "lint": 340,
+      "test-runner": 280
+    }
+  }
+}
+```
+
+## Filtering
+
+All analytics endpoints support filtering:
+
+| Parameter | Description |
+|-----------|-------------|
+| `startDate` | Start of time range (ISO 8601) |
+| `endDate` | End of time range (ISO 8601) |
+| `agentId` | Filter by specific agent |
+| `granularity` | Time grouping: 'hourly', 'daily', 'weekly', 'monthly' |
+
+Example:
+```bash
+GET /api/analytics/metrics?startDate=2024-01-01&endDate=2024-01-31&agentId=agent-123
+```
+
+## Key Metrics API
+
+Get all primary dashboard metrics in one call:
+
+```bash
+GET /api/analytics/metrics?startDate=2024-01-01&endDate=2024-01-31
+```
+
+Response:
+```json
+{
+  "totalTraces": 15420,
+  "successRate": 0.97,
+  "avgLatency": 1250,
+  "p95Latency": 2800,
+  "activeAgents": 5,
+  "activeAlerts": 3,
+  "totalTokens": 45000000,
+  "estimatedCost": 125.50
+}
+```
+
+## Comparing Periods
+
+Compare metrics across time periods:
+
+```javascript
+// Current week
+const current = await fetch('/api/analytics/metrics?startDate=2024-01-08&endDate=2024-01-14');
+
+// Previous week
+const previous = await fetch('/api/analytics/metrics?startDate=2024-01-01&endDate=2024-01-07');
+
+// Calculate changes
+const successRateChange = current.successRate - previous.successRate;
+const latencyChange = ((current.avgLatency - previous.avgLatency) / previous.avgLatency) * 100;
+```
+
+## Exporting Data
+
+Export analytics data for external analysis:
+
+```bash
+# Get detailed trace list
+GET /api/analytics/traces/list?startDate=2024-01-01&endDate=2024-01-31&limit=1000
+
+# Response includes all trace details for export
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Monitor success rate trends">
+    A dropping success rate often indicates issues before they become critical.
+  </Accordion>
+
+  <Accordion title="Track p95 latency">
+    Average latency can hide outliers. p95 shows what your slowest users experience.
+  </Accordion>
+
+  <Accordion title="Set up cost alerts">
+    Monitor costs closely, especially when testing new prompts or models.
+  </Accordion>
+
+  <Accordion title="Compare week-over-week">
+    Regular comparisons help identify regressions quickly.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Alerting" icon="bell" href="/features/alerting">
+    Set up alerts
+  </Card>
+  <Card title="Experiments" icon="flask" href="/features/experiments">
+    Run A/B tests
+  </Card>
+</CardGroup>

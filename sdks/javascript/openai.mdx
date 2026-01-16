@@ -1,0 +1,250 @@
+---
+title: OpenAI Integration
+description: Automatically trace OpenAI API calls with the Foil JavaScript SDK
+---
+
+# OpenAI Integration
+
+The Foil SDK provides seamless integration with the OpenAI SDK, automatically capturing all API calls with full context.
+
+## Basic Setup
+
+Wrap your OpenAI client to enable automatic tracing:
+
+```javascript
+import OpenAI from 'openai';
+import { createFoilTracer } from '@foil-ai/sdk';
+
+const openai = new OpenAI();
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent'
+});
+
+await tracer.trace(async (ctx) => {
+  // Wrap OpenAI client with trace context
+  const wrappedOpenAI = tracer.wrapOpenAI(openai, { context: ctx });
+
+  // All calls are automatically traced
+  const response = await wrappedOpenAI.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: 'Hello!' }]
+  });
+
+  return response.choices[0].message.content;
+});
+```
+
+## What Gets Captured
+
+The wrapper automatically captures:
+
+| Field | Description |
+|-------|-------------|
+| Model | The model used (gpt-4o, gpt-4o-mini, etc.) |
+| Input | Full message array |
+| Output | Assistant response content |
+| Tokens | Prompt, completion, and total tokens |
+| Latency | Total request duration |
+| TTFT | Time to first token (streaming) |
+| Tool Calls | Function/tool invocations |
+| Errors | Any API errors |
+
+## Streaming Responses
+
+Streaming is fully supported with accurate timing:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  const wrappedOpenAI = tracer.wrapOpenAI(openai, { context: ctx });
+
+  const stream = await wrappedOpenAI.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: 'Write a haiku' }],
+    stream: true
+  });
+
+  let content = '';
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content || '';
+    content += delta;
+    process.stdout.write(delta);
+  }
+
+  // Span automatically ends with full content and TTFT
+  return content;
+});
+```
+
+## Tool/Function Calls
+
+Tool calls are automatically tracked:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  const wrappedOpenAI = tracer.wrapOpenAI(openai, {
+    context: ctx,
+    trackToolCalls: true  // Default: true
+  });
+
+  const response = await wrappedOpenAI.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: 'What is the weather in Paris?' }],
+    tools: [{
+      type: 'function',
+      function: {
+        name: 'get_weather',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: { type: 'string' }
+          }
+        }
+      }
+    }]
+  });
+
+  // Tool calls captured in span
+  const toolCalls = response.choices[0].message.tool_calls;
+
+  if (toolCalls) {
+    for (const toolCall of toolCalls) {
+      // Execute the tool
+      const result = await executeFunction(
+        toolCall.function.name,
+        JSON.parse(toolCall.function.arguments)
+      );
+
+      // Continue conversation with tool result
+      // (also automatically traced)
+    }
+  }
+});
+```
+
+## Multiple Calls in One Trace
+
+Track a complete conversation with multiple LLM calls:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  const wrappedOpenAI = tracer.wrapOpenAI(openai, { context: ctx });
+  const messages = [];
+
+  // First call - get plan
+  messages.push({ role: 'user', content: 'Plan a trip to Japan' });
+  const planResponse = await wrappedOpenAI.chat.completions.create({
+    model: 'gpt-4o',
+    messages
+  });
+  messages.push(planResponse.choices[0].message);
+
+  // Second call - get details
+  messages.push({ role: 'user', content: 'Give me more details on day 1' });
+  const detailResponse = await wrappedOpenAI.chat.completions.create({
+    model: 'gpt-4o',
+    messages
+  });
+
+  // Both calls appear as separate spans in the same trace
+  return detailResponse.choices[0].message.content;
+});
+```
+
+## Mixing Manual and Automatic Spans
+
+Combine wrapper with manual spans for full control:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  const wrappedOpenAI = tracer.wrapOpenAI(openai, { context: ctx });
+
+  // Manual span for retrieval
+  const docs = await ctx.retriever('vector-db', async () => {
+    return await vectorStore.search(query);
+  });
+
+  // Automatic span for LLM call
+  const response = await wrappedOpenAI.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      { role: 'system', content: `Context: ${docs.join('\n')}` },
+      { role: 'user', content: query }
+    ]
+  });
+
+  // Manual span for post-processing
+  const result = await ctx.tool('formatter', async () => {
+    return formatResponse(response.choices[0].message.content);
+  });
+
+  return result;
+});
+```
+
+## Without Trace Context
+
+For simple one-off logging without full tracing:
+
+```javascript
+import { Foil } from '@foil-ai/sdk';
+
+const foil = new Foil({
+  apiKey: process.env.FOIL_API_KEY,
+  baseUrl: 'https://api.getfoil.ai'
+});
+
+// Wrap client globally (no trace context)
+const wrappedOpenAI = foil.wrapOpenAI(openai);
+
+// Calls logged individually (fire-and-forget)
+const response = await wrappedOpenAI.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Hello' }]
+});
+```
+
+## Configuration Options
+
+```javascript
+const wrappedOpenAI = tracer.wrapOpenAI(openai, {
+  context: ctx,           // Required for tracing
+  trackToolCalls: true,   // Track tool/function calls (default: true)
+  eventId: 'custom-id'    // Optional: provide custom span ID
+});
+```
+
+## Error Handling
+
+Errors are automatically captured in spans:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  const wrappedOpenAI = tracer.wrapOpenAI(openai, { context: ctx });
+
+  try {
+    const response = await wrappedOpenAI.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'Hello' }]
+    });
+    return response;
+  } catch (error) {
+    // Error automatically recorded in span with:
+    // - error.message
+    // - error.code (if OpenAI error)
+    // - status: 'error'
+    throw error;
+  }
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="LangChain Integration" icon="link" href="/sdks/javascript/langchain">
+    Trace LangChain workflows
+  </Card>
+  <Card title="Vercel AI SDK" icon="triangle" href="/sdks/javascript/vercel-ai">
+    Integrate with Vercel AI
+  </Card>
+</CardGroup>

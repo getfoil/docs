@@ -1,0 +1,321 @@
+---
+title: Experiments
+description: Run A/B tests on your AI prompts and models
+---
+
+# Experiments
+
+Foil's experiment feature lets you run A/B tests on prompts, models, and configurations to find what works best.
+
+## What Can You Test?
+
+- **Prompts** - Compare different system prompts or instructions
+- **Models** - Test gpt-4o vs gpt-4o-mini vs claude
+- **Parameters** - Temperature, max tokens, etc.
+- **Tools** - Different tool configurations
+- **Full workflows** - Compare entire agent implementations
+
+## Creating an Experiment
+
+### Via Dashboard
+
+1. Go to **Experiments** in the dashboard
+2. Click **Create Experiment**
+3. Configure variants
+4. Set traffic allocation
+5. Start the experiment
+
+### Via API
+
+```bash
+POST /api/experiments
+{
+  "name": "system-prompt-v2-test",
+  "description": "Testing new system prompt for customer support",
+  "variants": [
+    {
+      "name": "control",
+      "weight": 50,
+      "config": {
+        "systemPrompt": "You are a helpful customer support agent."
+      }
+    },
+    {
+      "name": "treatment",
+      "weight": 50,
+      "config": {
+        "systemPrompt": "You are a friendly, empathetic customer support agent. Always acknowledge the customer's feelings first."
+      }
+    }
+  ],
+  "metrics": ["user_rating", "response_quality", "goal_completed"]
+}
+```
+
+## Experiment Lifecycle
+
+```
+Draft → Running → Paused → Completed
+         ↑___________↓
+```
+
+### Start an Experiment
+
+```bash
+POST /api/experiments/:id/start
+```
+
+### Pause an Experiment
+
+```bash
+POST /api/experiments/:id/pause
+```
+
+### Stop an Experiment
+
+```bash
+POST /api/experiments/:id/stop
+```
+
+## Getting Variant Assignment
+
+In your application, request a variant assignment:
+
+```javascript
+// JavaScript SDK
+const assignment = await foil.getExperimentVariant(
+  experimentId,
+  userId  // Consistent identifier for the user
+);
+
+console.log(assignment.variant);  // 'control' or 'treatment'
+console.log(assignment.config);   // Variant-specific config
+```
+
+### Via API
+
+```bash
+GET /api/experiments/:id/assign?identifier=user-123
+```
+
+Response:
+```json
+{
+  "experimentId": "exp-123",
+  "variant": "treatment",
+  "config": {
+    "systemPrompt": "You are a friendly, empathetic..."
+  }
+}
+```
+
+## Using Variants in Your Code
+
+```javascript
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'customer-support'
+});
+
+async function handleQuery(query, userId) {
+  // Get experiment assignment
+  const assignment = await foil.getExperimentVariant('prompt-test-v2', userId);
+
+  return await tracer.trace(async (ctx) => {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: assignment.config.systemPrompt },
+        { role: 'user', content: query }
+      ]
+    });
+
+    return response.choices[0].message.content;
+  }, {
+    properties: {
+      experimentId: assignment.experimentId,
+      variant: assignment.variant
+    }
+  });
+}
+```
+
+## Tracking Metrics
+
+Record metrics for each variant:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  // ... do AI work ...
+
+  // Record experiment metrics
+  await ctx.recordSignal('response_quality', qualityScore, {
+    metadata: {
+      experimentId: 'prompt-test-v2',
+      variant: 'treatment'
+    }
+  });
+
+  // Record conversion/goal
+  await ctx.recordSignal('goal_completed', userGoalAchieved, {
+    metadata: {
+      experimentId: 'prompt-test-v2',
+      variant: 'treatment'
+    }
+  });
+});
+```
+
+## Viewing Results
+
+### Dashboard
+
+The experiment results page shows:
+- Variant performance comparison
+- Statistical significance
+- Metric breakdowns
+- Traffic distribution
+
+### API
+
+```bash
+GET /api/experiments/:id/results
+```
+
+Response:
+```json
+{
+  "experimentId": "exp-123",
+  "status": "running",
+  "startedAt": "2024-01-01T00:00:00Z",
+  "variants": [
+    {
+      "name": "control",
+      "trafficPercentage": 50,
+      "sampleSize": 1250,
+      "metrics": {
+        "user_rating": {
+          "mean": 3.8,
+          "stdDev": 0.9
+        },
+        "response_quality": {
+          "mean": 0.75,
+          "stdDev": 0.15
+        },
+        "goal_completed": {
+          "rate": 0.65
+        }
+      }
+    },
+    {
+      "name": "treatment",
+      "trafficPercentage": 50,
+      "sampleSize": 1230,
+      "metrics": {
+        "user_rating": {
+          "mean": 4.2,
+          "stdDev": 0.8
+        },
+        "response_quality": {
+          "mean": 0.82,
+          "stdDev": 0.12
+        },
+        "goal_completed": {
+          "rate": 0.72
+        }
+      }
+    }
+  ],
+  "analysis": {
+    "user_rating": {
+      "winner": "treatment",
+      "improvement": 10.5,
+      "pValue": 0.02,
+      "significant": true
+    }
+  }
+}
+```
+
+## Experiment Configuration
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Experiment identifier |
+| `description` | string | What you're testing |
+| `variants` | array | List of variants to test |
+| `variants[].name` | string | Variant name |
+| `variants[].weight` | number | Traffic percentage (0-100) |
+| `variants[].config` | object | Variant-specific configuration |
+| `metrics` | array | Signal names to track |
+| `minimumSampleSize` | number | Required samples per variant |
+| `maximumDuration` | number | Auto-stop after N days |
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Test one variable at a time">
+    Isolate what you're testing. If you change both prompt AND model, you won't know which caused the difference.
+  </Accordion>
+
+  <Accordion title="Use consistent identifiers">
+    Use user IDs or session IDs for assignment to ensure users get the same variant consistently.
+  </Accordion>
+
+  <Accordion title="Wait for statistical significance">
+    Don't end experiments early. Wait until you have enough samples and the p-value is meaningful (typically < 0.05).
+  </Accordion>
+
+  <Accordion title="Track multiple metrics">
+    A variant might improve one metric while hurting another. Track quality, user satisfaction, and business metrics.
+  </Accordion>
+
+  <Accordion title="Document your experiments">
+    Include clear descriptions of what you're testing and why. Future you will thank present you.
+  </Accordion>
+</AccordionGroup>
+
+## Example: Prompt A/B Test
+
+```javascript
+// 1. Create experiment
+const experiment = await fetch('/api/experiments', {
+  method: 'POST',
+  body: JSON.stringify({
+    name: 'empathy-prompt-test',
+    variants: [
+      {
+        name: 'control',
+        weight: 50,
+        config: { systemPrompt: 'You are a helpful assistant.' }
+      },
+      {
+        name: 'empathy',
+        weight: 50,
+        config: { systemPrompt: 'You are a helpful, empathetic assistant. Acknowledge user feelings.' }
+      }
+    ],
+    metrics: ['user_rating', 'response_quality']
+  })
+});
+
+// 2. Start experiment
+await fetch(`/api/experiments/${experiment.id}/start`, { method: 'POST' });
+
+// 3. In your app, use the assignment
+const { variant, config } = await foil.getExperimentVariant(experiment.id, userId);
+
+// 4. After gathering data, check results
+const results = await fetch(`/api/experiments/${experiment.id}/results`);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Signals" icon="signal" href="/concepts/signals">
+    Track experiment metrics
+  </Card>
+  <Card title="Analytics" icon="chart-line" href="/features/analytics">
+    Analyze results
+  </Card>
+</CardGroup>

@@ -1,0 +1,120 @@
+---
+title: Installation
+description: Install the Foil JavaScript SDK
+---
+
+# Installation
+
+The Foil JavaScript SDK provides full-featured tracing, logging, and feedback collection for Node.js applications.
+
+## Requirements
+
+- Node.js 18 or higher
+- npm, yarn, or pnpm
+
+## Install via npm
+
+```bash
+npm install @foil-ai/sdk
+```
+
+Or with yarn:
+
+```bash
+yarn add @foil-ai/sdk
+```
+
+Or with pnpm:
+
+```bash
+pnpm add @foil-ai/sdk
+```
+
+## Configuration
+
+### API Key
+
+Get your API key from the [Foil Dashboard](https://app.getfoil.ai) under **Settings > API Keys**.
+
+<Warning>
+  Never hardcode API keys in your source code. Use environment variables instead.
+</Warning>
+
+```bash
+# .env
+FOIL_API_KEY=sk_live_xxx_yyy
+```
+
+### Initialize the Tracer
+
+```javascript
+import { createFoilTracer } from '@foil-ai/sdk';
+
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent'
+});
+```
+
+### Configuration Options
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `apiKey` | string | Yes | - | Your Foil API key |
+| `agentName` | string | Yes | - | Unique identifier for your agent |
+| `baseUrl` | string | No | `https://api.getfoil.ai` | API endpoint URL |
+| `defaultModel` | string | No | - | Default model name for spans |
+| `debug` | boolean | No | `false` | Enable debug logging |
+
+### Debug Mode
+
+Enable debug mode to see detailed logs of all SDK operations:
+
+```javascript
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent',
+  debug: true
+});
+```
+
+Or set the environment variable:
+
+```bash
+FOIL_DEBUG=true
+```
+
+Debug output shows:
+- Span start/end events with IDs
+- Nesting depth visualization
+- Timing information
+- API call results
+
+## TypeScript Support
+
+The SDK is written in TypeScript and includes full type definitions:
+
+```typescript
+import {
+  createFoilTracer,
+  FoilTracer,
+  TraceContext,
+  SpanKind
+} from '@foil-ai/sdk';
+
+const tracer: FoilTracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY!,
+  agentName: 'my-agent'
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/sdks/javascript/quickstart">
+    Write your first trace
+  </Card>
+  <Card title="OpenAI Integration" icon="wand-magic-sparkles" href="/sdks/javascript/openai">
+    Auto-instrument OpenAI calls
+  </Card>
+</CardGroup>

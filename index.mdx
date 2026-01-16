@@ -1,97 +1,102 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: Introduction
+description: Monitor, debug, and improve your AI agents with Foil
 ---
 
-## Setting up
+# Welcome to Foil
 
-Get your documentation site up and running in minutes.
+Foil is an observability platform purpose-built for AI applications. Get complete visibility into your LLM calls, agent workflows, and AI pipelines with distributed tracing, real-time alerting, and actionable analytics.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+## Why Foil?
 
-## Make it yours
+Building AI applications is hard. Debugging them is harder. Foil gives you the tools to understand what your AI is doing, why it's failing, and how to make it better.
 
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Distributed Tracing" icon="diagram-project">
+    Track every LLM call, tool execution, and agent step with full context and parent-child relationships.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Real-time Alerting" icon="bell">
+    Get notified instantly when your AI hallucinates, gets stuck, or produces low-quality outputs.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Cost Analytics" icon="chart-line">
+    Monitor token usage, latency, and costs across all your models and agents.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Custom Signals" icon="signal">
+    Track user feedback, quality scores, and custom metrics tied to your traces.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## How It Works
 
-Everything you need to create world-class documentation.
+<Steps>
+  <Step title="Install the SDK">
+    Add the Foil SDK to your project with npm or pip.
+    ```bash
+    npm install @foil-ai/sdk
+    ```
+  </Step>
+  <Step title="Instrument Your Code">
+    Wrap your AI calls with Foil's tracer to capture every interaction.
+    ```javascript
+    const tracer = createFoilTracer({
+      apiKey: 'your-api-key',
+      agentName: 'my-agent'
+    });
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+    await tracer.trace(async (ctx) => {
+      // Your AI logic here
+    });
+    ```
+  </Step>
+  <Step title="View in Dashboard">
+    See your traces, metrics, and alerts in the Foil dashboard.
+  </Step>
+</Steps>
 
-## Need inspiration?
+## Features
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+### Traces & Spans
+
+Every AI interaction is captured as a **trace** containing multiple **spans**. Spans represent individual operations like LLM calls, tool executions, or retrieval steps. Foil automatically tracks:
+
+- Input and output content
+- Token usage (prompt, completion, total)
+- Latency and time-to-first-token
+- Errors and status codes
+- Custom metadata
+
+### Intelligent Alerting
+
+Foil uses LLM analysis to detect issues that traditional monitoring misses:
+
+- **Hallucination Detection** - Identifies fabricated facts in outputs
+- **Quality Analysis** - Catches off-topic or incomplete responses
+- **Loop Detection** - Alerts when agents get stuck repeating themselves
+- **Content Safety** - Flags inappropriate or unsafe content
+
+### Signals & Feedback
+
+Capture user feedback and custom metrics directly tied to your traces:
+
+- Thumbs up/down ratings
+- Star ratings
+- Sentiment analysis
+- Goal completion tracking
+- Custom metrics
+
+## Quick Links
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running in 5 minutes
+  </Card>
+  <Card title="JavaScript SDK" icon="js" href="/sdks/javascript/installation">
+    Full-featured SDK with tracing support
+  </Card>
+  <Card title="Python SDK" icon="python" href="/sdks/python/installation">
+    Lightweight SDK for Python apps
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/introduction">
+    Complete REST API documentation
+  </Card>
+</CardGroup>

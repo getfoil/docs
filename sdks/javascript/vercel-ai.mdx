@@ -1,0 +1,260 @@
+---
+title: Vercel AI SDK Integration
+description: Trace Vercel AI SDK calls with the Foil JavaScript SDK
+---
+
+# Vercel AI SDK Integration
+
+The Foil SDK integrates with the Vercel AI SDK to automatically trace streaming responses, tool calls, and multi-step interactions.
+
+## Setup
+
+```javascript
+import { openai } from '@ai-sdk/openai';
+import { streamText } from 'ai';
+import { createFoilTracer, createVercelAICallbacks } from '@foil-ai/sdk';
+
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'vercel-ai-agent'
+});
+```
+
+## Basic Usage
+
+Use the callbacks with `streamText`:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  const callbacks = createVercelAICallbacks(tracer, { context: ctx });
+
+  const result = await streamText({
+    model: openai('gpt-4o'),
+    prompt: 'Write a haiku about coding',
+    ...callbacks
+  });
+
+  // Consume the stream
+  for await (const chunk of result.textStream) {
+    process.stdout.write(chunk);
+  }
+
+  return result.text;
+});
+```
+
+## What Gets Captured
+
+| Event | Captured Data |
+|-------|---------------|
+| `onStart` | Model, input, start time |
+| `onToken` | Streaming tokens, TTFT |
+| `onToolCall` | Tool name, arguments |
+| `onToolResult` | Tool output, duration |
+| `onFinish` | Full response, tokens, latency |
+| `onError` | Error message, stack |
+
+## Tool Calls
+
+Automatic tracking of tool executions:
+
+```javascript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+await tracer.trace(async (ctx) => {
+  const callbacks = createVercelAICallbacks(tracer, { context: ctx });
+
+  const result = await streamText({
+    model: openai('gpt-4o'),
+    prompt: 'What is the weather in San Francisco?',
+    tools: {
+      getWeather: tool({
+        description: 'Get weather for a location',
+        parameters: z.object({
+          location: z.string()
+        }),
+        execute: async ({ location }) => {
+          return await fetchWeather(location);
+        }
+      })
+    },
+    ...callbacks
+  });
+
+  // Process result...
+});
+```
+
+Creates a trace like:
+```
+Trace: vercel-ai-agent
+├── LLM: gpt-4o
+│   ├── Tool: getWeather
+│   └── (continued response)
+```
+
+## Multi-Step Conversations
+
+Track multi-turn interactions:
+
+```javascript
+import { generateText } from 'ai';
+
+await tracer.trace(async (ctx) => {
+  const callbacks = createVercelAICallbacks(tracer, { context: ctx });
+  const messages = [];
+
+  // First turn
+  messages.push({ role: 'user', content: 'Hello!' });
+  const response1 = await generateText({
+    model: openai('gpt-4o'),
+    messages,
+    ...callbacks
+  });
+  messages.push({ role: 'assistant', content: response1.text });
+
+  // Second turn
+  messages.push({ role: 'user', content: 'Tell me a joke' });
+  const response2 = await generateText({
+    model: openai('gpt-4o'),
+    messages,
+    ...callbacks
+  });
+
+  return response2.text;
+});
+```
+
+## With Next.js Route Handlers
+
+Integrate with Next.js API routes:
+
+```typescript
+// app/api/chat/route.ts
+import { openai } from '@ai-sdk/openai';
+import { streamText } from 'ai';
+import { createFoilTracer, createVercelAICallbacks } from '@foil-ai/sdk';
+
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY!,
+  agentName: 'nextjs-chat'
+});
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  return await tracer.trace(async (ctx) => {
+    const callbacks = createVercelAICallbacks(tracer, { context: ctx });
+
+    const result = await streamText({
+      model: openai('gpt-4o'),
+      messages,
+      ...callbacks
+    });
+
+    return result.toDataStreamResponse();
+  }, {
+    name: 'chat-completion',
+    input: messages
+  });
+}
+```
+
+## With useChat Hook
+
+The server-side tracing works seamlessly with the client `useChat` hook:
+
+```typescript
+// Client component
+'use client';
+import { useChat } from 'ai/react';
+
+export function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/api/chat'
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>{m.content}</div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} />
+      </form>
+    </div>
+  );
+}
+```
+
+## Object Generation
+
+Track structured output generation:
+
+```javascript
+import { generateObject } from 'ai';
+import { z } from 'zod';
+
+await tracer.trace(async (ctx) => {
+  const callbacks = createVercelAICallbacks(tracer, { context: ctx });
+
+  const result = await generateObject({
+    model: openai('gpt-4o'),
+    schema: z.object({
+      recipe: z.object({
+        name: z.string(),
+        ingredients: z.array(z.string()),
+        steps: z.array(z.string())
+      })
+    }),
+    prompt: 'Generate a recipe for chocolate cake',
+    ...callbacks
+  });
+
+  return result.object;
+});
+```
+
+## Configuration Options
+
+```javascript
+const callbacks = createVercelAICallbacks(tracer, {
+  context: ctx,           // Trace context (required)
+  captureTokens: true,    // Count tokens (default: true)
+  captureContent: true    // Capture full content (default: true)
+});
+```
+
+## Error Handling
+
+Errors are automatically captured:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  const callbacks = createVercelAICallbacks(tracer, { context: ctx });
+
+  try {
+    const result = await streamText({
+      model: openai('gpt-4o'),
+      prompt: 'Hello',
+      ...callbacks
+    });
+    return result.text;
+  } catch (error) {
+    // Error automatically recorded via onError callback
+    throw error;
+  }
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Signals & Feedback" icon="signal" href="/concepts/signals">
+    Record user feedback
+  </Card>
+  <Card title="Alerting" icon="bell" href="/features/alerting">
+    Set up alerts for issues
+  </Card>
+</CardGroup>

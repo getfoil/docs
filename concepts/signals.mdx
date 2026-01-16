@@ -1,0 +1,261 @@
+---
+title: Signals
+description: Track custom metrics and user feedback with Foil signals
+---
+
+# Signals
+
+**Signals** are custom metrics and feedback tied to your traces. Use them to track user satisfaction, quality scores, and any custom metrics relevant to your AI application.
+
+## What Are Signals?
+
+Signals let you record:
+- **User feedback** - Thumbs up/down, star ratings
+- **Quality metrics** - Relevance, accuracy, helpfulness scores
+- **Custom metrics** - Any numeric, boolean, or categorical value
+
+Signals are linked to traces, allowing you to correlate feedback with specific AI interactions.
+
+## Signal Types
+
+| Type | Description | Example Values |
+|------|-------------|----------------|
+| `feedback` | Direct user feedback | thumbs up, thumbs down |
+| `rating` | Numeric ratings | 1-5 stars, 1-10 score |
+| `sentiment` | Sentiment analysis | positive, negative, neutral |
+| `quality` | Quality assessment | 0.0-1.0 score |
+| `completion` | Goal completion | true/false |
+| `custom` | Any custom metric | varies |
+
+## Recording Signals
+
+### JavaScript SDK
+
+```javascript
+await tracer.trace(async (ctx) => {
+  // Do AI work...
+
+  // Record user feedback
+  await ctx.recordFeedback(true); // thumbs up
+
+  // Record star rating
+  await ctx.recordRating(4); // 4 out of 5 stars
+
+  // Record custom signal
+  await ctx.recordSignal('response_quality', 0.85, {
+    signalType: 'quality',
+    source: 'llm',
+    confidence: 0.92
+  });
+});
+```
+
+### Low-Level API
+
+```javascript
+import { Foil } from '@foil-ai/sdk';
+
+const foil = new Foil({ apiKey: process.env.FOIL_API_KEY });
+
+// Record signal directly
+await foil.recordSignal({
+  signalName: 'user_satisfaction',
+  value: 4,
+  traceId: 'trace-123',
+  spanId: 'span-456',
+  agentName: 'customer-support',
+  signalType: 'rating',
+  source: 'user'
+});
+```
+
+### Batch Recording
+
+Record multiple signals at once:
+
+```javascript
+await foil.recordSignalBatch([
+  {
+    signalName: 'relevance',
+    value: 0.9,
+    traceId: 'trace-123',
+    signalType: 'quality'
+  },
+  {
+    signalName: 'helpfulness',
+    value: 0.85,
+    traceId: 'trace-123',
+    signalType: 'quality'
+  },
+  {
+    signalName: 'goal_completed',
+    value: true,
+    traceId: 'trace-123',
+    signalType: 'completion'
+  }
+]);
+```
+
+## Signal Properties
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `signalName` | string | Yes | Name of the signal |
+| `value` | any | Yes | Signal value |
+| `traceId` | string | No | Links to a trace |
+| `spanId` | string | No | Links to specific span |
+| `agentName` | string | No | Agent that generated signal |
+| `signalType` | string | No | Type categorization |
+| `source` | string | No | 'user', 'system', 'llm' |
+| `confidence` | number | No | Confidence score (0-1) |
+| `reasoning` | string | No | Explanation for the value |
+| `metadata` | object | No | Additional context |
+
+## Common Use Cases
+
+### User Feedback
+
+```javascript
+// Thumbs up/down
+await ctx.recordFeedback(userClickedThumbsUp);
+
+// Star rating
+await ctx.recordRating(userStarRating);
+
+// Detailed feedback
+await ctx.recordSignal('user_feedback', {
+  rating: 4,
+  comment: 'Helpful but could be more concise'
+}, {
+  signalType: 'feedback',
+  source: 'user'
+});
+```
+
+### LLM-Evaluated Quality
+
+Use an LLM to evaluate response quality:
+
+```javascript
+// Evaluate response with separate LLM call
+const evaluation = await evaluateLLM.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{
+    role: 'system',
+    content: 'Rate the response relevance from 0-1'
+  }, {
+    role: 'user',
+    content: `Query: ${query}\nResponse: ${response}`
+  }]
+});
+
+await ctx.recordSignal('relevance', parseFloat(evaluation), {
+  signalType: 'quality',
+  source: 'llm',
+  confidence: 0.95,
+  modelUsed: 'gpt-4o-mini'
+});
+```
+
+### Goal Completion Tracking
+
+```javascript
+// Track if the AI completed the user's goal
+await ctx.recordSignal('goal_completed', userGoalAchieved, {
+  signalType: 'completion',
+  source: 'system',
+  metadata: {
+    goalType: 'purchase',
+    attemptNumber: 1
+  }
+});
+```
+
+### A/B Test Metrics
+
+```javascript
+await ctx.recordSignal('conversion', userConverted, {
+  signalType: 'custom',
+  source: 'system',
+  metadata: {
+    experimentId: 'prompt-v2-test',
+    variant: 'treatment'
+  }
+});
+```
+
+## Retrieving Signals
+
+### Get Signals for a Trace
+
+```javascript
+const signals = await foil.getTraceSignals(traceId);
+
+for (const signal of signals) {
+  console.log(`${signal.signalName}: ${signal.value}`);
+}
+```
+
+### REST API
+
+```bash
+GET /api/signals?traceId=trace-123
+```
+
+## Signal Sources
+
+Track where signals originate:
+
+| Source | Description |
+|--------|-------------|
+| `user` | Direct user feedback |
+| `system` | Automated system metrics |
+| `llm` | LLM-based evaluation |
+
+```javascript
+// User-provided feedback
+await ctx.recordSignal('rating', 5, { source: 'user' });
+
+// System-computed metric
+await ctx.recordSignal('latency_bucket', 'fast', { source: 'system' });
+
+// LLM-evaluated quality
+await ctx.recordSignal('coherence', 0.9, {
+  source: 'llm',
+  confidence: 0.88,
+  modelUsed: 'gpt-4o-mini'
+});
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use consistent signal names">
+    Standardize names across your application for better aggregation:
+    - `user_rating` not `rating`, `stars`, `score`
+    - `response_quality` not `quality`, `resp_qual`
+  </Accordion>
+
+  <Accordion title="Include confidence for LLM signals">
+    When using LLMs to evaluate, always include a confidence score.
+  </Accordion>
+
+  <Accordion title="Link signals to traces">
+    Always include `traceId` to correlate signals with the AI interaction that generated them.
+  </Accordion>
+
+  <Accordion title="Batch when possible">
+    Use `recordSignalBatch` when recording multiple signals to reduce API calls.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Agents" icon="robot" href="/concepts/agents">
+    Organize by agent
+  </Card>
+  <Card title="Analytics" icon="chart-line" href="/features/analytics">
+    Analyze signal trends
+  </Card>
+</CardGroup>

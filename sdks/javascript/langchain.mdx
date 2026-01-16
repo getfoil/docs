@@ -1,0 +1,243 @@
+---
+title: LangChain Integration
+description: Trace LangChain workflows with the Foil JavaScript SDK
+---
+
+# LangChain Integration
+
+The Foil SDK provides a callback handler for LangChain that automatically traces all LLM calls, tool executions, chains, and retrievers.
+
+## Setup
+
+```javascript
+import { ChatOpenAI } from '@langchain/openai';
+import { createFoilTracer, createLangChainCallback } from '@foil-ai/sdk';
+
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'langchain-agent'
+});
+
+// Create callback handler
+const callbacks = createLangChainCallback(tracer);
+```
+
+## Basic Usage
+
+Pass the callback to any LangChain component:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  const callbacks = createLangChainCallback(tracer, { context: ctx });
+
+  const model = new ChatOpenAI({
+    modelName: 'gpt-4o',
+    callbacks: [callbacks]
+  });
+
+  const response = await model.invoke('What is the capital of France?');
+  return response.content;
+});
+```
+
+## What Gets Traced
+
+The LangChain callback automatically captures:
+
+| Component | Captured Data |
+|-----------|---------------|
+| **LLM** | Model, input, output, tokens, latency |
+| **Chat Model** | Messages, response, usage |
+| **Tool** | Tool name, input, output, duration |
+| **Chain** | Chain type, inputs, outputs |
+| **Retriever** | Query, documents, scores |
+| **Agent** | Actions, observations, final answer |
+
+## Chains
+
+All chain types are automatically traced:
+
+```javascript
+import { LLMChain } from 'langchain/chains';
+import { PromptTemplate } from '@langchain/core/prompts';
+
+await tracer.trace(async (ctx) => {
+  const callbacks = createLangChainCallback(tracer, { context: ctx });
+
+  const prompt = PromptTemplate.fromTemplate(
+    'Tell me a {adjective} joke about {topic}'
+  );
+
+  const chain = new LLMChain({
+    llm: new ChatOpenAI({ modelName: 'gpt-4o' }),
+    prompt,
+    callbacks: [callbacks]
+  });
+
+  const result = await chain.invoke({
+    adjective: 'funny',
+    topic: 'programming'
+  });
+
+  return result.text;
+});
+```
+
+## Agents with Tools
+
+Agent workflows with tool calls are fully traced:
+
+```javascript
+import { AgentExecutor, createOpenAIFunctionsAgent } from 'langchain/agents';
+import { DynamicTool } from '@langchain/core/tools';
+
+await tracer.trace(async (ctx) => {
+  const callbacks = createLangChainCallback(tracer, { context: ctx });
+
+  const tools = [
+    new DynamicTool({
+      name: 'calculator',
+      description: 'Performs math calculations',
+      func: async (input) => {
+        return String(eval(input));
+      }
+    }),
+    new DynamicTool({
+      name: 'search',
+      description: 'Searches the web',
+      func: async (query) => {
+        return await searchWeb(query);
+      }
+    })
+  ];
+
+  const agent = await createOpenAIFunctionsAgent({
+    llm: new ChatOpenAI({ modelName: 'gpt-4o' }),
+    tools,
+    prompt: agentPrompt
+  });
+
+  const executor = new AgentExecutor({
+    agent,
+    tools,
+    callbacks: [callbacks]
+  });
+
+  const result = await executor.invoke({
+    input: 'What is 25 * 4 and who invented calculus?'
+  });
+
+  return result.output;
+});
+```
+
+This creates a trace like:
+```
+Trace: langchain-agent
+├── Chain: AgentExecutor
+│   ├── LLM: gpt-4o (planning)
+│   ├── Tool: calculator
+│   ├── LLM: gpt-4o (continue)
+│   ├── Tool: search
+│   └── LLM: gpt-4o (final answer)
+```
+
+## RAG Pipelines
+
+Trace retrieval-augmented generation:
+
+```javascript
+import { RetrievalQAChain } from 'langchain/chains';
+
+await tracer.trace(async (ctx) => {
+  const callbacks = createLangChainCallback(tracer, { context: ctx });
+
+  const chain = RetrievalQAChain.fromLLM(
+    new ChatOpenAI({ modelName: 'gpt-4o' }),
+    vectorStore.asRetriever(),
+    { callbacks: [callbacks] }
+  );
+
+  const result = await chain.invoke({
+    query: 'What is our refund policy?'
+  });
+
+  return result.text;
+});
+
+// Creates trace with retriever and LLM spans
+```
+
+## LCEL (LangChain Expression Language)
+
+Works with LCEL chains:
+
+```javascript
+import { RunnableSequence } from '@langchain/core/runnables';
+
+await tracer.trace(async (ctx) => {
+  const callbacks = createLangChainCallback(tracer, { context: ctx });
+
+  const chain = RunnableSequence.from([
+    promptTemplate,
+    new ChatOpenAI({ modelName: 'gpt-4o' }),
+    new StringOutputParser()
+  ]);
+
+  const result = await chain.invoke(
+    { topic: 'AI' },
+    { callbacks: [callbacks] }
+  );
+
+  return result;
+});
+```
+
+## Streaming
+
+Streaming responses are supported:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  const callbacks = createLangChainCallback(tracer, { context: ctx });
+
+  const model = new ChatOpenAI({
+    modelName: 'gpt-4o',
+    streaming: true,
+    callbacks: [callbacks]
+  });
+
+  const stream = await model.stream('Write a poem');
+
+  let content = '';
+  for await (const chunk of stream) {
+    content += chunk.content;
+    process.stdout.write(chunk.content);
+  }
+
+  return content;
+});
+```
+
+## Configuration Options
+
+```javascript
+const callbacks = createLangChainCallback(tracer, {
+  context: ctx,              // Trace context (required for proper nesting)
+  captureInputs: true,       // Capture full inputs (default: true)
+  captureOutputs: true,      // Capture full outputs (default: true)
+  maxInputLength: 10000,     // Truncate long inputs
+  maxOutputLength: 10000     // Truncate long outputs
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Vercel AI SDK" icon="triangle" href="/sdks/javascript/vercel-ai">
+    Integrate with Vercel AI
+  </Card>
+  <Card title="Tracing Deep Dive" icon="diagram-project" href="/sdks/javascript/tracing">
+    Advanced tracing patterns
+  </Card>
+</CardGroup>

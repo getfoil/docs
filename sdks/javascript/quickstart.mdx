@@ -1,0 +1,243 @@
+---
+title: Quickstart
+description: Get started with the Foil JavaScript SDK
+---
+
+# JavaScript SDK Quickstart
+
+Learn the basics of tracing AI calls with the Foil JavaScript SDK.
+
+## Basic Tracing
+
+The core concept is the **trace**. A trace represents a complete unit of work (like handling a user request) and contains one or more **spans** (individual operations).
+
+```javascript
+import { createFoilTracer, SpanKind } from '@foil-ai/sdk';
+
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent'
+});
+
+// Create a trace
+const result = await tracer.trace(async (ctx) => {
+  // ctx is the TraceContext - use it to create spans
+
+  const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
+    input: 'Hello, world!'
+  });
+
+  // Do your work here...
+  const output = 'Hi there!';
+
+  // End the span with results
+  await span.end({
+    output,
+    tokens: { prompt: 10, completion: 5, total: 15 }
+  });
+
+  return output;
+}, { name: 'greeting' });
+```
+
+## Span Types
+
+Foil supports several span types to categorize different operations:
+
+```javascript
+import { SpanKind } from '@foil-ai/sdk';
+
+SpanKind.AGENT      // 'agent' - Top-level agent operations
+SpanKind.LLM        // 'llm' - LLM API calls
+SpanKind.TOOL       // 'tool' - Tool executions
+SpanKind.CHAIN      // 'chain' - Chain/pipeline steps
+SpanKind.RETRIEVER  // 'retriever' - RAG retrieval
+SpanKind.EMBEDDING  // 'embedding' - Embedding generations
+SpanKind.CUSTOM     // 'custom' - Custom operations
+```
+
+## Nested Spans
+
+Spans automatically nest based on when they're created:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  // Parent span
+  const agentSpan = await ctx.startSpan(SpanKind.AGENT, 'process-query');
+
+  // Child span (automatically nested under agentSpan)
+  const llmSpan = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
+    input: messages
+  });
+
+  const response = await callLLM(messages);
+
+  await llmSpan.end({ output: response });
+  await agentSpan.end({ output: 'Done' });
+});
+```
+
+## Convenience Methods
+
+The `TraceContext` provides shorthand methods for common span types:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  // Tool execution with automatic span management
+  const searchResults = await ctx.tool('web-search', async () => {
+    return await searchAPI(query);
+  }, { input: { query } });
+
+  // Retriever with automatic span
+  const docs = await ctx.retriever('vector-db', async () => {
+    return await vectorStore.search(query);
+  });
+
+  // Embedding with automatic span
+  const embeddings = await ctx.embedding('text-embedding-3-small', async () => {
+    return await createEmbeddings(texts);
+  });
+});
+```
+
+## Recording Tokens and Timing
+
+Always record token usage and timing when available:
+
+```javascript
+const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o');
+
+const startTime = Date.now();
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages
+});
+
+await span.end({
+  output: response.choices[0].message.content,
+  tokens: {
+    prompt: response.usage.prompt_tokens,
+    completion: response.usage.completion_tokens,
+    total: response.usage.total_tokens
+  },
+  timing: {
+    totalDuration: Date.now() - startTime
+  }
+});
+```
+
+## Error Handling
+
+Errors are automatically captured when spans fail:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o');
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages
+    });
+    await span.end({ output: response.choices[0].message.content });
+  } catch (error) {
+    // Span automatically records error
+    await span.end({
+      error: error.message,
+      status: 'error'
+    });
+    throw error;
+  }
+});
+```
+
+Or use `wrapInSpan` for automatic error handling:
+
+```javascript
+await tracer.trace(async (ctx) => {
+  // Automatically captures errors and ends span
+  const result = await ctx.wrapInSpan(SpanKind.LLM, 'gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages
+    });
+  });
+});
+```
+
+## Custom Metadata
+
+Add custom properties to spans for filtering and analysis:
+
+```javascript
+const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
+  input: messages,
+  properties: {
+    userId: 'user-123',
+    sessionId: 'session-456',
+    feature: 'chat',
+    version: '2.0'
+  }
+});
+```
+
+## Complete Example
+
+```javascript
+import OpenAI from 'openai';
+import { createFoilTracer, SpanKind } from '@foil-ai/sdk';
+
+const openai = new OpenAI();
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'customer-support-agent'
+});
+
+async function handleUserQuery(query, userId) {
+  return await tracer.trace(async (ctx) => {
+    // Step 1: Search knowledge base
+    const docs = await ctx.retriever('knowledge-base', async () => {
+      return await searchKnowledgeBase(query);
+    }, { input: { query } });
+
+    // Step 2: Generate response with context
+    const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
+      input: { query, context: docs },
+      properties: { userId }
+    });
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: `Context: ${docs.join('\n')}` },
+        { role: 'user', content: query }
+      ]
+    });
+
+    await span.end({
+      output: response.choices[0].message.content,
+      tokens: {
+        prompt: response.usage.prompt_tokens,
+        completion: response.usage.completion_tokens,
+        total: response.usage.total_tokens
+      }
+    });
+
+    return response.choices[0].message.content;
+  }, {
+    name: 'handle-query',
+    properties: { userId }
+  });
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deep Dive: Tracing" icon="diagram-project" href="/sdks/javascript/tracing">
+    Advanced tracing patterns
+  </Card>
+  <Card title="OpenAI Integration" icon="wand-magic-sparkles" href="/sdks/javascript/openai">
+    Automatic OpenAI instrumentation
+  </Card>
+</CardGroup>

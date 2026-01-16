@@ -1,33 +1,241 @@
 ---
-title: 'Introduction'
-description: 'Example section for showcasing API endpoints'
+title: API Reference
+description: Complete reference for the Foil REST API
 ---
 
-<Note>
-  If you're not looking to build API reference documentation, you can delete
-  this section by removing the api-reference folder.
-</Note>
+# API Reference
 
-## Welcome
+The Foil API provides programmatic access to traces, alerts, analytics, and more.
 
-There are two ways to build API documentation: [OpenAPI](https://mintlify.com/docs/api-playground/openapi/setup) and [MDX components](https://mintlify.com/docs/api-playground/mdx/configuration). For the starter kit, we are using the following OpenAPI specification.
+## Base URL
 
-<Card
-  title="Plant Store Endpoints"
-  icon="leaf"
-  href="https://github.com/mintlify/starter/blob/main/api-reference/openapi.json"
->
-  View the OpenAPI specification file
-</Card>
+```
+https://api.getfoil.ai/api
+```
+
+For self-hosted deployments, use your instance URL.
 
 ## Authentication
 
-All API endpoints are authenticated using Bearer tokens and picked up from the specification file.
+Foil supports two authentication methods:
+
+### JWT Bearer Token
+
+For dashboard and user-authenticated requests:
+
+```bash
+curl -X GET https://api.getfoil.ai/api/users/profile \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+Obtain a JWT token via the login endpoint:
+
+```bash
+POST /api/auth/login
+{
+  "email": "user@example.com",
+  "password": "your-password"
+}
+```
+
+### API Key
+
+For SDK and programmatic access:
+
+```bash
+curl -X POST https://api.getfoil.ai/api/signals \
+  -H "x-api-key: sk_live_xxx_yyy" \
+  -H "Content-Type: application/json" \
+  -d '{"signalName": "user_rating", "value": 5}'
+```
+
+API keys are created in the dashboard under **Settings > API Keys**.
+
+<Warning>
+  API keys provide full access to your data. Keep them secure and never expose them in client-side code.
+</Warning>
+
+## Rate Limits
+
+| Tier | Limit | Endpoints |
+|------|-------|-----------|
+| Standard | 100 req/min | Users, Analytics, Agents, Events |
+| Strict | 20 req/min | API Keys, Admin |
+| Ingestion | 500 req/min | Spans, Signals, Logs |
+
+Rate limit headers are included in responses:
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1704067200
+```
+
+## Response Format
+
+All responses are JSON with consistent structure:
+
+### Success Response
 
 ```json
-"security": [
-  {
-    "bearerAuth": []
-  }
-]
+{
+  "success": true,
+  "data": { ... }
+}
 ```
+
+### Error Response
+
+```json
+{
+  "success": false,
+  "error": {
+    "message": "Description of what went wrong",
+    "code": "ERROR_CODE"
+  }
+}
+```
+
+## Common Error Codes
+
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `UNAUTHORIZED` | 401 | Missing or invalid authentication |
+| `FORBIDDEN` | 403 | Insufficient permissions |
+| `NOT_FOUND` | 404 | Resource doesn't exist |
+| `VALIDATION_ERROR` | 400 | Invalid request parameters |
+| `RATE_LIMITED` | 429 | Too many requests |
+| `INTERNAL_ERROR` | 500 | Server error |
+
+## Pagination
+
+List endpoints support pagination:
+
+```bash
+GET /api/spans/traces?limit=50&skip=100
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `limit` | 50 | Number of items per page (max 100) |
+| `skip` | 0 | Number of items to skip |
+
+Response includes pagination info:
+```json
+{
+  "data": [...],
+  "pagination": {
+    "total": 1250,
+    "limit": 50,
+    "skip": 100,
+    "hasMore": true
+  }
+}
+```
+
+## Date Filtering
+
+Most endpoints accept date filters:
+
+```bash
+GET /api/analytics/metrics?startDate=2024-01-01&endDate=2024-01-31
+```
+
+Dates should be in ISO 8601 format: `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm:ssZ`
+
+## Core Endpoints
+
+### Authentication
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/login` | User login |
+| POST | `/auth/register` | User registration |
+| POST | `/auth/forgot-password` | Request password reset |
+| POST | `/auth/reset-password` | Reset password with token |
+| GET | `/auth/verify-email` | Verify email address |
+
+### API Keys
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/keys` | Create new API key |
+| GET | `/keys` | List all API keys |
+| PUT | `/keys/:id/refresh` | Rotate API key |
+| POST | `/keys/:id/revoke` | Revoke API key |
+| DELETE | `/keys/:id` | Delete API key |
+
+### Spans & Traces
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/spans/traces` | List traces (root spans) |
+| GET | `/spans/traces/:traceId` | Get trace with all spans |
+| GET | `/spans/filters` | Get available filter options |
+
+### Signals
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/signals` | Record a signal |
+| POST | `/signals/batch` | Record multiple signals |
+| GET | `/signals` | List signals |
+| GET | `/signals/summary` | Get signal aggregations |
+| GET | `/signals/trace/:traceId` | Get signals for trace |
+
+### Agents
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/agents` | List all agents |
+| POST | `/agents` | Create agent |
+| GET | `/agents/:agentId` | Get agent |
+| PUT | `/agents/:agentId` | Update agent |
+| DELETE | `/agents/:agentId` | Delete agent |
+| PUT | `/agents/:agentId/alerts` | Update alert settings |
+
+### Alerts
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/spans/alerts` | List all alerts |
+| GET | `/spans/alerts/summary` | Alert summary by agent |
+| GET | `/spans/alerts/:alertId` | Get alert details |
+| PUT | `/spans/alerts/:alertId/acknowledge` | Acknowledge alert |
+| PUT | `/spans/alerts/:alertId/reopen` | Reopen alert |
+
+### Analytics
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/analytics/metrics` | Dashboard metrics |
+| GET | `/analytics/traces/success-failure` | Success/failure rates |
+| GET | `/analytics/traces/requests-over-time` | Request volume |
+| GET | `/analytics/traces/latency-percentiles` | Latency metrics |
+| GET | `/analytics/traces/token-usage` | Token consumption |
+| GET | `/analytics/costs` | Cost breakdown |
+
+### Experiments
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/experiments` | List experiments |
+| POST | `/experiments` | Create experiment |
+| GET | `/experiments/:id` | Get experiment |
+| POST | `/experiments/:id/start` | Start experiment |
+| POST | `/experiments/:id/pause` | Pause experiment |
+| POST | `/experiments/:id/stop` | Stop experiment |
+| GET | `/experiments/:id/assign` | Get variant assignment |
+| GET | `/experiments/:id/results` | Get experiment results |
+
+## SDKs
+
+For easier integration, use our official SDKs:
+
+<CardGroup cols={2}>
+  <Card title="JavaScript SDK" icon="js" href="/sdks/javascript/installation">
+    npm install @foil-ai/sdk
+  </Card>
+  <Card title="Python SDK" icon="python" href="/sdks/python/installation">
+    pip install foil-sdk
+  </Card>
+</CardGroup>

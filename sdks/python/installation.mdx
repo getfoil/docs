@@ -1,0 +1,96 @@
+---
+title: Installation
+description: Install the Foil Python SDK
+---
+
+# Installation
+
+The Foil Python SDK provides automatic OpenAI instrumentation and logging for Python applications.
+
+## Requirements
+
+- Python 3.8 or higher
+- pip
+
+## Install via pip
+
+```bash
+pip install foil-sdk
+```
+
+Or with poetry:
+
+```bash
+poetry add foil-sdk
+```
+
+## Configuration
+
+### API Key
+
+Get your API key from the [Foil Dashboard](https://app.getfoil.ai) under **Settings > API Keys**.
+
+<Warning>
+  Never hardcode API keys in your source code. Use environment variables instead.
+</Warning>
+
+```bash
+# .env or shell
+export FOIL_API_KEY=sk_live_xxx_yyy
+```
+
+### Initialize the Client
+
+```python
+import os
+from foil import Foil
+
+foil = Foil(api_key=os.environ['FOIL_API_KEY'])
+```
+
+### Configuration Options
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `api_key` | str | Yes | - | Your Foil API key |
+| `base_url` | str | No | `https://api.getfoil.ai` | API endpoint URL |
+
+### Custom Base URL
+
+For self-hosted deployments:
+
+```python
+foil = Foil(
+    api_key=os.environ['FOIL_API_KEY'],
+    base_url='https://your-foil-instance.com/api'
+)
+```
+
+## Verify Installation
+
+```python
+from foil import Foil
+import os
+
+foil = Foil(api_key=os.environ['FOIL_API_KEY'])
+
+# Test with a simple log
+foil.log({
+    'model': 'test',
+    'input': 'Hello',
+    'output': 'World'
+})
+
+print('Foil SDK installed successfully!')
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/sdks/python/quickstart">
+    Get started with tracing
+  </Card>
+  <Card title="OpenAI Integration" icon="wand-magic-sparkles" href="/sdks/python/openai">
+    Auto-instrument OpenAI calls
+  </Card>
+</CardGroup>

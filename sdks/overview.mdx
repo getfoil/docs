@@ -1,0 +1,184 @@
+---
+title: SDK Overview
+description: Choose the right Foil SDK for your project
+---
+
+# SDK Overview
+
+Foil provides official SDKs for JavaScript and Python. Both SDKs offer core functionality for tracing, logging, and feedback collection, with the JavaScript SDK providing additional features for complex agent workflows.
+
+## Feature Comparison
+
+| Feature | JavaScript | Python |
+|---------|------------|--------|
+| Basic Logging | Yes | Yes |
+| OpenAI Wrapper | Yes | Yes |
+| Distributed Tracing | Yes | - |
+| Automatic Span Hierarchy | Yes | - |
+| LangChain Integration | Yes | - |
+| Vercel AI Integration | Yes | - |
+| Tool Call Tracking | Yes | Yes |
+| Signal Recording | Yes | - |
+| Streaming Support | Yes | Yes |
+
+## JavaScript SDK
+
+The JavaScript SDK is our most full-featured SDK, designed for complex AI applications with multiple agents, tools, and nested workflows.
+
+**Best for:**
+- Node.js backend services
+- Next.js applications
+- Complex agent architectures
+- LangChain and Vercel AI integrations
+
+```bash
+npm install @foil-ai/sdk
+```
+
+<Card title="JavaScript SDK Docs" icon="js" href="/sdks/javascript/installation">
+  Complete JavaScript SDK documentation
+</Card>
+
+### Key Features
+
+**FoilTracer** - High-level tracing API with automatic span management:
+
+```javascript
+import { createFoilTracer, SpanKind } from '@foil-ai/sdk';
+
+const tracer = createFoilTracer({
+  apiKey: 'your-api-key',
+  agentName: 'my-agent'
+});
+
+await tracer.trace(async (ctx) => {
+  // Automatic parent-child span relationships
+  await ctx.tool('search', async () => {
+    return await searchAPI(query);
+  });
+
+  const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o');
+  // ... LLM call
+  await span.end({ output, tokens });
+});
+```
+
+**Framework Integrations:**
+
+```javascript
+// LangChain
+import { createLangChainCallback } from '@foil-ai/sdk';
+const callbacks = createLangChainCallback(tracer);
+
+// Vercel AI SDK
+import { createVercelAICallbacks } from '@foil-ai/sdk';
+const callbacks = createVercelAICallbacks(tracer);
+```
+
+## Python SDK
+
+The Python SDK provides a lightweight interface for logging in Python applications, with automatic OpenAI instrumentation.
+
+**Best for:**
+- Python backend services
+- FastAPI/Flask applications
+- Jupyter notebooks
+- Simple LLM integrations
+
+```bash
+pip install foil-sdk
+```
+
+<Card title="Python SDK Docs" icon="python" href="/sdks/python/installation">
+  Complete Python SDK documentation
+</Card>
+
+### Key Features
+
+**OpenAI Wrapper** - Automatic tracing for all OpenAI calls:
+
+```python
+from openai import OpenAI
+from foil import Foil
+
+client = OpenAI()
+foil = Foil(api_key='your-api-key')
+
+# Automatic tracing for all calls
+wrapped = foil.wrap_openai(client)
+response = wrapped.chat.completions.create(
+    model='gpt-4o',
+    messages=[{'role': 'user', 'content': 'Hello!'}]
+)
+```
+
+**Fire-and-Forget Logging:**
+
+```python
+foil.log({
+    'model': 'gpt-4o',
+    'input': messages,
+    'output': response,
+    'latency': 1200,
+    'tokens': {'prompt': 100, 'completion': 50}
+})
+```
+
+## Authentication
+
+Both SDKs use API key authentication. Get your API key from the [Foil Dashboard](https://app.getfoil.ai).
+
+```bash
+# Environment variable (recommended)
+export FOIL_API_KEY=sk_live_xxx_yyy
+```
+
+<Warning>
+  Never commit API keys to version control. Use environment variables or a secrets manager.
+</Warning>
+
+## Base URL Configuration
+
+By default, SDKs connect to the Foil cloud API. For self-hosted deployments:
+
+<Tabs>
+  <Tab title="JavaScript">
+    ```javascript
+    const tracer = createFoilTracer({
+      apiKey: 'your-api-key',
+      agentName: 'my-agent',
+      baseUrl: 'https://your-foil-instance.com/api'
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    foil = Foil(
+        api_key='your-api-key',
+        base_url='https://your-foil-instance.com/api'
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Debug Mode
+
+Enable debug logging to troubleshoot integration issues:
+
+<Tabs>
+  <Tab title="JavaScript">
+    ```javascript
+    const tracer = createFoilTracer({
+      apiKey: 'your-api-key',
+      agentName: 'my-agent',
+      debug: true  // or set FOIL_DEBUG=true
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    ```
+  </Tab>
+</Tabs>

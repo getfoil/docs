@@ -1,0 +1,276 @@
+---
+title: Alerting
+description: Configure real-time alerts for AI quality issues
+---
+
+# Alerting
+
+Foil's alerting system detects AI quality issues in real-time and notifies you via email or SMS.
+
+## Alert Types
+
+Foil detects two categories of issues:
+
+### Threshold-Based Alerts
+
+Triggered when metrics exceed configured limits:
+
+| Alert Type | Description | Default Threshold |
+|------------|-------------|-------------------|
+| `error` | Request failed with error | Any error |
+| `highDuration` | Response took too long | 5000ms |
+| `highInputTokens` | Too many input tokens | 100,000 |
+| `highOutputTokens` | Too many output tokens | 50,000 |
+| `highCost` | Single call too expensive | $1.00 |
+| `timeout` | Request timed out | 30s |
+
+### LLM-Analyzed Alerts
+
+Foil uses AI to detect quality issues:
+
+| Alert Type | Description |
+|------------|-------------|
+| `hallucination` | Output contains fabricated facts |
+| `nsfw` | Output contains inappropriate content |
+| `stuck` | Agent is repeating itself or looping |
+| `quality` | Output is off-topic or low quality |
+
+## How It Works
+
+```
+User Request → Your Agent → Foil Ingestion
+                                   ↓
+                          ┌─────────────────┐
+                          │  Inline Checks  │
+                          │  (thresholds)   │
+                          └────────┬────────┘
+                                   ↓
+                          ┌─────────────────┐
+                          │  LLM Analysis   │
+                          │  (quality)      │
+                          └────────┬────────┘
+                                   ↓
+                          ┌─────────────────┐
+                          │  Rate Limiter   │
+                          └────────┬────────┘
+                                   ↓
+                          ┌─────────────────┐
+                          │  Notifications  │
+                          │  (email/SMS)    │
+                          └─────────────────┘
+```
+
+## Configuring Alerts
+
+### Per-Agent Configuration
+
+Configure alerts in the dashboard or via API:
+
+```bash
+PUT /api/agents/:agentId/alerts
+{
+  "llmAnalysis": {
+    "enabled": true,
+    "alertTypes": {
+      "hallucination": {
+        "enabled": true,
+        "threshold": 0.7,
+        "severity": "high",
+        "channels": ["email"],
+        "cooldownMinutes": 5
+      },
+      "nsfw": {
+        "enabled": true,
+        "threshold": 0.8,
+        "severity": "critical",
+        "channels": ["email", "sms"]
+      },
+      "stuck": {
+        "enabled": true,
+        "threshold": 0.6,
+        "severity": "warning"
+      },
+      "quality": {
+        "enabled": true,
+        "threshold": 0.5,
+        "severity": "warning"
+      }
+    }
+  },
+  "thresholds": {
+    "duration": 5000,
+    "inputTokens": 100000,
+    "outputTokens": 50000,
+    "cost": 1.0
+  },
+  "contacts": {
+    "email": [
+      { "address": "alerts@yourcompany.com", "enabled": true }
+    ],
+    "sms": [
+      { "phoneNumber": "+1234567890", "enabled": true }
+    ]
+  }
+}
+```
+
+### Configuration Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `enabled` | boolean | Enable/disable the alert type |
+| `threshold` | number | Confidence threshold (0-1) for LLM alerts |
+| `severity` | string | 'low', 'warning', 'high', 'critical' |
+| `channels` | array | Notification channels ('email', 'sms') |
+| `cooldownMinutes` | number | Minimum time between alerts |
+
+## Alert Severity
+
+| Severity | Description | Use Case |
+|----------|-------------|----------|
+| `low` | Informational | Minor quality issues |
+| `warning` | Needs attention | Moderate issues |
+| `high` | Important | Significant problems |
+| `critical` | Immediate action | Safety issues, NSFW |
+
+## Alert Lifecycle
+
+Alerts follow an incident-based model:
+
+```
+1. Detection
+   └── Alert created with status: "open"
+
+2. Accumulation
+   └── Same alert type increments occurrence count
+
+3. Acknowledgment
+   └── User acknowledges, status: "acknowledged"
+
+4. Resolution
+   └── Issue resolved, status: "resolved"
+```
+
+### Acknowledging Alerts
+
+```bash
+PUT /api/spans/alerts/:alertId/acknowledge
+{
+  "resolution": "acknowledged"
+}
+```
+
+### Reopening Alerts
+
+```bash
+PUT /api/spans/alerts/:alertId/reopen
+```
+
+## Notification Channels
+
+### Email
+
+Requires SendGrid configuration:
+
+```bash
+# foil-ingestion/.env
+SENDGRID_API_KEY=SG.xxx
+SENDGRID_FROM_EMAIL=alerts@yourcompany.com
+SENDGRID_ALERT_TEMPLATE_ID=d-xxx  # Optional: for styled emails
+```
+
+### SMS
+
+Requires Twilio configuration:
+
+```bash
+# foil-ingestion/.env
+TWILIO_ACCOUNT_SID=xxx
+TWILIO_AUTH_TOKEN=xxx
+TWILIO_FROM_NUMBER=+1234567890
+```
+
+## Rate Limiting
+
+To prevent alert fatigue, Foil implements rate limiting:
+
+- **Cooldown period**: Minimum time between notifications for the same alert type
+- **Default**: 5 minutes
+- **Configurable**: Per alert type in agent settings
+
+```json
+{
+  "hallucination": {
+    "cooldownMinutes": 10  // Wait 10 minutes between notifications
+  }
+}
+```
+
+## Viewing Alerts
+
+### Dashboard
+
+The Alerts page shows:
+- Active alerts by agent
+- Alert history
+- Occurrence details
+- Resolution status
+
+### API
+
+```bash
+# List all alerts
+GET /api/spans/alerts
+
+# Get alerts summary by agent
+GET /api/spans/alerts/summary
+
+# Get specific alert with occurrences
+GET /api/spans/alerts/:alertId
+
+# Get alerts for a specific trace
+GET /api/spans/traces/:traceId/alerts
+```
+
+## Testing Alerts
+
+Send a test alert to verify configuration:
+
+```bash
+POST /v1/alerts/test
+{
+  "channel": "email",
+  "alertType": "hallucination"
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Start with conservative thresholds">
+    Begin with higher confidence thresholds (0.8+) and lower as you understand your baseline.
+  </Accordion>
+
+  <Accordion title="Use cooldowns appropriately">
+    Set longer cooldowns for non-critical alerts to reduce noise.
+  </Accordion>
+
+  <Accordion title="Prioritize critical alerts">
+    Only use 'critical' severity for safety issues that need immediate attention.
+  </Accordion>
+
+  <Accordion title="Configure per-agent">
+    Different agents may need different thresholds. A creative writing agent might tolerate more "hallucination" than a factual Q&A bot.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Analytics" icon="chart-line" href="/features/analytics">
+    View alert trends
+  </Card>
+  <Card title="Agents" icon="robot" href="/concepts/agents">
+    Configure per-agent settings
+  </Card>
+</CardGroup>

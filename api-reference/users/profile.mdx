@@ -1,0 +1,217 @@
+---
+title: Get User Profile
+api: GET /api/users/profile
+description: Returns the authenticated user's profile with subscription and resource details
+---
+
+# Get User Profile
+
+Returns a comprehensive profile for the authenticated user, including subscription plan and features, and resource counts — all in a single call.
+
+## Authentication
+
+<Note>
+  Requires a valid JWT Bearer token.
+</Note>
+
+```bash
+curl -X GET https://api.getfoil.ai/api/users/profile \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+## Response
+
+<ResponseField name="id" type="string">
+  User ID
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  User email address
+</ResponseField>
+
+<ResponseField name="firstName" type="string">
+  First name
+</ResponseField>
+
+<ResponseField name="lastName" type="string">
+  Last name
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Full display name (`firstName + lastName`)
+</ResponseField>
+
+<ResponseField name="image" type="string | null">
+  Profile image URL
+</ResponseField>
+
+<ResponseField name="company" type="string | null">
+  Company name
+</ResponseField>
+
+<ResponseField name="provider" type="string">
+  Auth provider: `local`, `google`, or `github`
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean">
+  Whether the account is active
+</ResponseField>
+
+<ResponseField name="isAdmin" type="boolean">
+  Whether the user has admin privileges
+</ResponseField>
+
+<ResponseField name="isEmailVerified" type="boolean">
+  Whether the email address has been verified
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 account creation date
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 last update date
+</ResponseField>
+
+### `subscription`
+
+Current plan, usage, and feature entitlements.
+
+<ResponseField name="subscription.plan" type="string">
+  Plan key: `trial`, `starter`, or `pro`
+</ResponseField>
+
+<ResponseField name="subscription.planName" type="string">
+  Human-readable plan name: `Free Trial`, `Starter`, or `Pro`
+</ResponseField>
+
+<ResponseField name="subscription.status" type="string">
+  Subscription status: `trialing`, `active`, `canceled`, `past_due`
+</ResponseField>
+
+<ResponseField name="subscription.spansUsed" type="number">
+  Number of spans consumed in the current period
+</ResponseField>
+
+<ResponseField name="subscription.spansLimit" type="number">
+  Maximum spans allowed in the current period
+</ResponseField>
+
+<ResponseField name="subscription.usagePercentage" type="number">
+  Percentage of span limit used (0–100)
+</ResponseField>
+
+<ResponseField name="subscription.cancelAtPeriodEnd" type="boolean">
+  Whether the subscription will cancel at the end of the current period
+</ResponseField>
+
+<ResponseField name="subscription.currentPeriodEnd" type="string | null">
+  ISO 8601 date when the current billing period ends
+</ResponseField>
+
+<ResponseField name="subscription.features" type="object">
+  Plan feature entitlements (see [Features](#features) below)
+</ResponseField>
+
+<ResponseField name="subscription.trialEndDate" type="string | null">
+  ISO 8601 trial end date. Only present when `plan` is `trial`.
+</ResponseField>
+
+<ResponseField name="subscription.trialDaysRemaining" type="number">
+  Days remaining in trial. Only present when `plan` is `trial`.
+</ResponseField>
+
+<ResponseField name="subscription.trialExpired" type="boolean">
+  Whether the trial has expired. Only present when `plan` is `trial`.
+</ResponseField>
+
+#### Features
+
+The `subscription.features` object contains plan entitlements. Numeric values of `-1` mean unlimited.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `spans` | number | Max spans per period (`-1` = unlimited) |
+| `agents` | number | Max agents (`-1` = unlimited) |
+| `retention` | number | Data retention in days (`-1` = unlimited) |
+| `alerts` | boolean | Alert notifications enabled |
+| `evaluations` | boolean | LLM evaluations enabled |
+| `exports` | boolean | Data export enabled |
+| `deepSearch` | boolean | Natural-language ClickHouse search |
+| `semanticSearch` | boolean | Embedding-based semantic search |
+| `smartSearch` | boolean | Unified intelligent search |
+| `customLLMLogic` | boolean | Custom LLM evaluation logic |
+| `modelTraining` | boolean | ML model training |
+| `sso` | boolean | Single sign-on |
+| `rbac` | boolean | Role-based access control |
+| `support` | string | Support tier: `community`, `email`, or `priority` |
+| `trialDays` | number | Length of trial period in days |
+
+### `resources`
+
+Account resource counts.
+
+<ResponseField name="resources.agentCount" type="number">
+  Total number of agents
+</ResponseField>
+
+<ResponseField name="resources.activeApiKeyCount" type="number">
+  Number of non-revoked API keys
+</ResponseField>
+
+## Example Response
+
+```json
+{
+  "id": "664f1a2b3c4d5e6f7a8b9c0d",
+  "email": "user@example.com",
+  "firstName": "Jane",
+  "lastName": "Doe",
+  "name": "Jane Doe",
+  "image": null,
+  "company": null,
+  "provider": "google",
+  "isActive": true,
+  "isAdmin": false,
+  "isEmailVerified": true,
+  "createdAt": "2026-01-07T10:00:00.000Z",
+  "updatedAt": "2026-02-01T15:30:00.000Z",
+  "subscription": {
+    "plan": "trial",
+    "planName": "Free Trial",
+    "status": "trialing",
+    "spansUsed": 0,
+    "spansLimit": 10000,
+    "usagePercentage": 0,
+    "cancelAtPeriodEnd": false,
+    "currentPeriodEnd": null,
+    "features": {
+      "spans": 10000,
+      "agents": -1,
+      "retention": -1,
+      "alerts": true,
+      "evaluations": true,
+      "exports": true,
+      "trialDays": 14,
+      "deepSearch": true,
+      "semanticSearch": false,
+      "smartSearch": false,
+      "support": "community"
+    },
+    "trialEndDate": "2026-02-21T00:00:00.000Z",
+    "trialDaysRemaining": 14,
+    "trialExpired": false
+  },
+  "resources": {
+    "agentCount": 3,
+    "activeApiKeyCount": 1
+  }
+}
+```
+
+## Error Responses
+
+| Status | Description |
+|--------|-------------|
+| 401 | Missing or invalid authentication |
+| 404 | User not found |

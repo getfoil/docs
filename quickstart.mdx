@@ -18,32 +18,48 @@ This guide will get you from zero to traced AI calls in under 5 minutes.
 <Tabs>
   <Tab title="JavaScript">
     ```bash
-    npm install @foil-ai/sdk
+    npm install @foil/foil-js
     ```
   </Tab>
   <Tab title="Python">
     ```bash
-    pip install foil-sdk
+    pip install foil-ai
     ```
   </Tab>
 </Tabs>
 
-## Step 2: Initialize the Client
+## Step 2: Initialize Foil
 
 <Tabs>
-  <Tab title="JavaScript">
+  <Tab title="JavaScript (OpenTelemetry)">
+    The easiest way to get started - one line and all your LLM calls are traced automatically.
+
     ```javascript
-    import { createFoilTracer } from '@foil-ai/sdk';
+    const { Foil } = require('@foil/foil-js/otel');
+
+    // Initialize at the top of your app
+    Foil.init({
+      apiKey: process.env.FOIL_API_KEY,
+      agentName: 'my-first-agent',
+    });
+    ```
+  </Tab>
+  <Tab title="JavaScript (Manual)">
+    For more control over what gets traced.
+
+    ```javascript
+    const { createFoilTracer } = require('@foil/foil-js');
 
     const tracer = createFoilTracer({
       apiKey: process.env.FOIL_API_KEY,
-      agentName: 'my-first-agent'
+      agentName: 'my-first-agent',
     });
     ```
   </Tab>
   <Tab title="Python">
     ```python
     from foil import Foil
+    import os
 
     foil = Foil(api_key=os.environ['FOIL_API_KEY'])
     ```
@@ -53,28 +69,55 @@ This guide will get you from zero to traced AI calls in under 5 minutes.
 ## Step 3: Trace Your First Call
 
 <Tabs>
-  <Tab title="JavaScript">
+  <Tab title="JavaScript (OpenTelemetry)">
+    With OpenTelemetry, your LLM calls are traced automatically - no extra code needed!
+
     ```javascript
-    import OpenAI from 'openai';
-    import { createFoilTracer, SpanKind } from '@foil-ai/sdk';
+    const { Foil } = require('@foil/foil-js/otel');
+    const OpenAI = require('openai');
+
+    // Initialize Foil (do this once at app startup)
+    Foil.init({
+      apiKey: process.env.FOIL_API_KEY,
+      agentName: 'my-first-agent',
+    });
+
+    // Use OpenAI as normal - it's automatically traced!
+    const openai = new OpenAI();
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'What is the capital of France?' }],
+    });
+
+    console.log(response.choices[0].message.content); // "Paris"
+    // ↑ This call was automatically traced to Foil!
+    ```
+  </Tab>
+  <Tab title="JavaScript (Manual)">
+    Manual tracing gives you full control over span creation.
+
+    ```javascript
+    const { createFoilTracer, SpanKind } = require('@foil/foil-js');
+    const OpenAI = require('openai');
 
     const openai = new OpenAI();
     const tracer = createFoilTracer({
       apiKey: process.env.FOIL_API_KEY,
-      agentName: 'my-first-agent'
+      agentName: 'my-first-agent',
     });
 
     // Wrap your AI logic in a trace
     const result = await tracer.trace(async (ctx) => {
       // Start an LLM span
       const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
-        input: 'What is the capital of France?'
+        input: 'What is the capital of France?',
       });
 
       // Make the API call
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
-        messages: [{ role: 'user', content: 'What is the capital of France?' }]
+        messages: [{ role: 'user', content: 'What is the capital of France?' }],
       });
 
       // End the span with results
@@ -83,8 +126,8 @@ This guide will get you from zero to traced AI calls in under 5 minutes.
         tokens: {
           prompt: response.usage.prompt_tokens,
           completion: response.usage.completion_tokens,
-          total: response.usage.total_tokens
-        }
+          total: response.usage.total_tokens,
+        },
       });
 
       return response.choices[0].message.content;
@@ -131,11 +174,11 @@ You'll see:
 ## What's Next?
 
 <CardGroup cols={2}>
-  <Card title="Auto-Instrument OpenAI" icon="wand-magic-sparkles" href="/sdks/javascript/openai">
-    Use our OpenAI wrapper for zero-code instrumentation
+  <Card title="OpenTelemetry Integration" icon="circle-nodes" href="/sdks/javascript/opentelemetry">
+    Deep dive into auto-instrumentation
   </Card>
-  <Card title="Add Tool Calls" icon="wrench" href="/sdks/javascript/tracing">
-    Track tool executions within your traces
+  <Card title="Manual Tracing" icon="code" href="/sdks/javascript/tracing">
+    Full control with custom spans
   </Card>
   <Card title="Set Up Alerts" icon="bell" href="/features/alerting">
     Get notified when issues occur
@@ -145,49 +188,73 @@ You'll see:
   </Card>
 </CardGroup>
 
-## Using the OpenAI Wrapper (Easier!)
+## Complete Example
 
-For the simplest setup, use our OpenAI wrapper which automatically traces all calls:
+Here's a full working example you can copy and run:
 
 <Tabs>
   <Tab title="JavaScript">
     ```javascript
-    import OpenAI from 'openai';
-    import { createFoilTracer } from '@foil-ai/sdk';
+    // app.js
+    const { Foil } = require('@foil/foil-js/otel');
+    const OpenAI = require('openai');
 
-    const openai = new OpenAI();
-    const tracer = createFoilTracer({
+    // Initialize Foil at startup
+    Foil.init({
       apiKey: process.env.FOIL_API_KEY,
-      agentName: 'my-agent'
+      agentName: 'quickstart-agent',
     });
 
-    // Wrap OpenAI client
-    await tracer.trace(async (ctx) => {
-      const wrappedOpenAI = tracer.wrapOpenAI(openai, { context: ctx });
+    async function main() {
+      const openai = new OpenAI();
 
-      // All calls are automatically traced
-      const response = await wrappedOpenAI.chat.completions.create({
+      // All OpenAI calls are automatically traced
+      const response = await openai.chat.completions.create({
         model: 'gpt-4o',
-        messages: [{ role: 'user', content: 'Hello!' }]
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: 'Write a haiku about programming.' },
+        ],
       });
-    });
+
+      console.log(response.choices[0].message.content);
+
+      // Flush traces before exit
+      await Foil.flush();
+    }
+
+    main();
+    ```
+
+    Run it:
+    ```bash
+    FOIL_API_KEY=your-key OPENAI_API_KEY=your-key node app.js
     ```
   </Tab>
   <Tab title="Python">
     ```python
+    # app.py
     from openai import OpenAI
     from foil import Foil
+    import os
 
-    client = OpenAI()
     foil = Foil(api_key=os.environ['FOIL_API_KEY'])
+    client = foil.wrap_openai(OpenAI())
 
-    # Wrap OpenAI client - all calls automatically traced
-    wrapped_client = foil.wrap_openai(client)
-
-    response = wrapped_client.chat.completions.create(
+    response = client.chat.completions.create(
         model='gpt-4o',
-        messages=[{'role': 'user', 'content': 'Hello!'}]
+        messages=[
+            {'role': 'system', 'content': 'You are a helpful assistant.'},
+            {'role': 'user', 'content': 'Write a haiku about programming.'},
+        ]
     )
+
+    print(response.choices[0].message.content)
+    ```
+
+    Run it:
+    ```bash
+    FOIL_API_KEY=your-key OPENAI_API_KEY=your-key python app.py
     ```
   </Tab>
 </Tabs>

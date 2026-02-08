@@ -144,6 +144,12 @@ Dates should be in ISO 8601 format: `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm:ssZ`
 
 ## Core Endpoints
 
+### Users
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/users/profile` | Get user profile with subscription and resource counts |
+
 ### Authentication
 
 | Method | Endpoint | Description |
@@ -233,7 +239,7 @@ For easier integration, use our official SDKs:
 
 <CardGroup cols={2}>
   <Card title="JavaScript SDK" icon="js" href="/sdks/javascript/installation">
-    npm install @foil-ai/sdk
+    npm install @foil/foil-js
   </Card>
   <Card title="Python SDK" icon="python" href="/sdks/python/installation">
     pip install foil-sdk

@@ -1,0 +1,316 @@
+---
+title: OpenTelemetry Integration
+description: Zero-code auto-instrumentation for LLM calls with OpenTelemetry
+---
+
+# OpenTelemetry Integration
+
+Foil supports [OpenTelemetry](https://opentelemetry.io/) for automatic instrumentation of your LLM calls. Combined with [OpenLLMetry](https://github.com/traceloop/openllmetry-js), you get zero-code tracing for OpenAI, Anthropic, LangChain, and more.
+
+## Why OpenTelemetry?
+
+<CardGroup cols={2}>
+  <Card title="Zero Code Changes" icon="wand-magic-sparkles">
+    Automatic instrumentation - just initialize and all LLM calls are traced
+  </Card>
+  <Card title="Industry Standard" icon="globe">
+    OpenTelemetry is the industry standard for observability
+  </Card>
+  <Card title="Wide Support" icon="puzzle-piece">
+    Works with OpenAI, Anthropic, Azure, Cohere, LangChain, LlamaIndex, and more
+  </Card>
+  <Card title="Combine with Manual" icon="layer-group">
+    Use alongside manual tracing for custom spans
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+### Installation
+
+```bash
+npm install @foil/foil-js
+```
+
+### Basic Setup
+
+```javascript
+const { Foil } = require('@foil/foil-js/otel');
+
+// Initialize Foil with OpenTelemetry - one line setup
+Foil.init({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-ai-agent',
+});
+
+// Now all OpenAI/Anthropic/LangChain calls are automatically traced!
+const OpenAI = require('openai');
+const openai = new OpenAI();
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages: [{ role: 'user', content: 'Hello!' }],
+});
+// ↑ This call is automatically traced to Foil
+```
+
+## Configuration Options
+
+### Foil.init() Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `apiKey` | string | Yes | Your Foil API key |
+| `agentName` | string | No | Agent name for grouping traces in Foil |
+| `endpoint` | string | No | Custom OTLP endpoint URL |
+| `debug` | boolean | No | Enable debug logging |
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `FOIL_API_KEY` | Foil API key (alternative to passing in options) |
+| `FOIL_OTLP_ENDPOINT` | Custom OTLP endpoint URL |
+| `FOIL_DEBUG` | Set to `'true'` to enable debug logging |
+| `OTEL_SERVICE_NAME` | Default service name for traces |
+
+## Advanced Setup
+
+### Manual FoilSpanProcessor
+
+For more control over the OpenTelemetry configuration:
+
+```javascript
+const { FoilSpanProcessor } = require('@foil/foil-js/otel');
+const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+const { Resource } = require('@opentelemetry/resources');
+
+// Create a custom provider
+const provider = new NodeTracerProvider({
+  resource: new Resource({
+    'service.name': 'my-custom-agent',
+    'deployment.environment': 'production',
+  }),
+});
+
+// Add the Foil processor with custom options
+provider.addSpanProcessor(new FoilSpanProcessor({
+  apiKey: process.env.FOIL_API_KEY,
+  maxBatchSize: 100,        // Max spans per batch (default: 100)
+  scheduledDelayMs: 5000,   // Batch export interval (default: 5000ms)
+  exportTimeoutMs: 30000,   // Request timeout (default: 30000ms)
+  debug: true,              // Enable debug logging
+}));
+
+// Register globally
+provider.register();
+```
+
+### FoilSpanProcessor Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `apiKey` | string | Required | Your Foil API key |
+| `endpoint` | string | `https://api.foil.dev/api/otlp/v1/traces` | OTLP endpoint |
+| `maxBatchSize` | number | 100 | Maximum spans per batch |
+| `scheduledDelayMs` | number | 5000 | Batch export interval in ms |
+| `exportTimeoutMs` | number | 30000 | Export request timeout in ms |
+| `debug` | boolean | false | Enable debug logging |
+
+## Supported Libraries
+
+The following libraries are automatically instrumented:
+
+| Library | Features |
+|---------|----------|
+| **OpenAI** | Chat completions, embeddings, assistants, function calling |
+| **Anthropic** | Claude messages, streaming |
+| **Azure OpenAI** | All Azure OpenAI endpoints |
+| **Cohere** | Chat, generate, embed |
+| **Google Generative AI** | Gemini models |
+| **AWS Bedrock** | Bedrock runtime |
+| **LangChain** | Chains, agents, retrievers, tools |
+| **LlamaIndex** | Queries, retrievers |
+
+## Adding Attachments
+
+You can add attachments (images, code, text) to OTEL spans:
+
+```javascript
+const { attachImage, attachCode, attachText, addAttachment } = require('@foil/foil-js/otel');
+const { trace } = require('@opentelemetry/api');
+
+const tracer = trace.getTracer('my-app');
+
+tracer.startActiveSpan('process-image', async (span) => {
+  // Attach an image (base64)
+  attachImage(span, imageBase64Data, 'input');
+
+  // Attach code
+  attachCode(span, 'console.log("hello")', 'javascript', 'output');
+
+  // Attach text
+  attachText(span, 'Additional context here', 'input');
+
+  // Generic attachment
+  addAttachment(span, 'text', 'Some text', 'input');
+
+  // ... your logic ...
+
+  span.end();
+});
+```
+
+### Attachment Types
+
+| Type | Description | Helper Function |
+|------|-------------|-----------------|
+| `image` | Base64-encoded image data | `attachImage(span, base64, role)` |
+| `code` | Code snippet with language | `attachCode(span, code, language, role)` |
+| `text` | Plain text content | `attachText(span, text, role)` |
+
+The `role` parameter can be `'input'` or `'output'` to indicate the attachment's position in the span.
+
+## Custom Attributes
+
+Add Foil-specific attributes to your spans:
+
+```javascript
+const span = tracer.startSpan('my-operation');
+
+// Session tracking
+span.setAttribute('foil.session_id', sessionId);
+
+// End user tracking
+span.setAttribute('foil.end_user_id', userId);
+
+// Custom end user properties
+span.setAttribute('foil.end_user.plan', 'premium');
+span.setAttribute('foil.end_user.company', 'Acme Inc');
+
+// Cost tracking
+span.setAttribute('foil.cost', 0.0023);
+
+span.end();
+```
+
+### Foil Custom Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `foil.agent_name` | Override agent name for this span |
+| `foil.agent_id` | Explicit agent ID |
+| `foil.session_id` | Session/conversation ID |
+| `foil.end_user_id` | End user identifier |
+| `foil.end_user.*` | Custom end user properties |
+| `foil.cost` | Cost in dollars |
+| `foil.attachment.{n}.type` | Attachment type |
+| `foil.attachment.{n}.value` | Attachment content |
+| `foil.attachment.{n}.role` | `input` or `output` |
+
+## Combining with Manual Tracing
+
+You can use OpenTelemetry auto-instrumentation alongside manual Foil tracing:
+
+```javascript
+const { Foil } = require('@foil/foil-js/otel');
+const { createFoilTracer, SpanKind } = require('@foil/foil-js');
+
+// Set up OTEL for auto-instrumentation
+Foil.init({ apiKey: API_KEY });
+
+// Create a manual tracer for custom spans
+const tracer = createFoilTracer({
+  apiKey: API_KEY,
+  agentName: 'hybrid-agent',
+});
+
+await tracer.trace(async (ctx) => {
+  // Manual custom span
+  const span = await ctx.startSpan(SpanKind.CUSTOM, 'validate-input', {
+    input: { query: userQuery },
+  });
+
+  // Validation logic...
+
+  await span.end({ output: { valid: true } });
+
+  // Auto-instrumented OpenAI call
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [{ role: 'user', content: userQuery }],
+  });
+
+  return response;
+}, { name: 'hybrid-trace' });
+```
+
+## Graceful Shutdown
+
+Always shut down gracefully to flush pending spans:
+
+```javascript
+const { Foil } = require('@foil/foil-js/otel');
+
+// Graceful shutdown handler
+process.on('SIGTERM', async () => {
+  console.log('Shutting down...');
+  await Foil.shutdown();
+  process.exit(0);
+});
+
+// Or flush manually before exit
+await Foil.flush();
+```
+
+## Troubleshooting
+
+### Enable Debug Logging
+
+```javascript
+// Via environment variable
+process.env.FOIL_DEBUG = 'true';
+
+// Or via options
+Foil.init({
+  apiKey: API_KEY,
+  debug: true,
+});
+```
+
+### Common Issues
+
+<AccordionGroup>
+  <Accordion title="Spans not appearing in Foil">
+    - Check that your API key is correct
+    - Ensure `Foil.init()` is called before any LLM calls
+    - Call `await Foil.flush()` before process exit
+    - Enable debug logging to see export status
+  </Accordion>
+  <Accordion title="Missing LLM details (tokens, model)">
+    - Ensure `Foil.init()` is called at the top of your app, before importing LLM libraries
+    - Check that the LLM library is supported
+    - Some details require specific library versions
+  </Accordion>
+  <Accordion title="Duplicate spans">
+    - Don't initialize both `Foil.init()` and manual `FoilSpanProcessor`
+    - Check you're not also using manual `createFoilTracer` for the same calls
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Manual Tracing" icon="code" href="/sdks/javascript/tracing">
+    Learn about manual span creation
+  </Card>
+  <Card title="OpenAI Integration" icon="robot" href="/sdks/javascript/openai">
+    OpenAI-specific features
+  </Card>
+  <Card title="Alerting" icon="bell" href="/features/alerting">
+    Set up alerts for your traces
+  </Card>
+  <Card title="Analytics" icon="chart-line" href="/features/analytics">
+    Explore your trace analytics
+  </Card>
+</CardGroup>

@@ -29,10 +29,16 @@
                 "pages": [
                   "sdks/javascript/installation",
                   "sdks/javascript/quickstart",
-                  "sdks/javascript/tracing",
+                  "sdks/javascript/opentelemetry",
+                  "sdks/javascript/tracing"
+                ]
+              },
+              {
+                "group": "Integrations",
+                "pages": [
                   "sdks/javascript/openai",
-                  "sdks/javascript/langchain",
-                  "sdks/javascript/vercel-ai"
+                  "sdks/javascript/vercel-ai",
+                  "sdks/javascript/langchain"
                 ]
               },
               {
@@ -71,6 +77,12 @@
             "group": "API Reference",
             "pages": [
               "api-reference/introduction"
+            ]
+          },
+          {
+            "group": "Users",
+            "pages": [
+              "api-reference/users/profile"
             ]
           }
         ]

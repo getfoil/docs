@@ -32,7 +32,7 @@ The JavaScript SDK is our most full-featured SDK, designed for complex AI applic
 - LangChain and Vercel AI integrations
 
 ```bash
-npm install @foil-ai/sdk
+npm install @foil/foil-js
 ```
 
 <Card title="JavaScript SDK Docs" icon="js" href="/sdks/javascript/installation">
@@ -44,7 +44,7 @@ npm install @foil-ai/sdk
 **FoilTracer** - High-level tracing API with automatic span management:
 
 ```javascript
-import { createFoilTracer, SpanKind } from '@foil-ai/sdk';
+import { createFoilTracer, SpanKind } from '@foil/foil-js';
 
 const tracer = createFoilTracer({
   apiKey: 'your-api-key',
@@ -67,11 +67,11 @@ await tracer.trace(async (ctx) => {
 
 ```javascript
 // LangChain
-import { createLangChainCallback } from '@foil-ai/sdk';
+import { createLangChainCallback } from '@foil/foil-js';
 const callbacks = createLangChainCallback(tracer);
 
 // Vercel AI SDK
-import { createVercelAICallbacks } from '@foil-ai/sdk';
+import { createVercelAICallbacks } from '@foil/foil-js';
 const callbacks = createVercelAICallbacks(tracer);
 ```
 

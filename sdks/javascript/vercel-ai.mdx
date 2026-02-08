@@ -7,31 +7,54 @@ description: Trace Vercel AI SDK calls with the Foil JavaScript SDK
 
 The Foil SDK integrates with the Vercel AI SDK to automatically trace streaming responses, tool calls, and multi-step interactions.
 
-## Setup
+## Quick Start (Recommended)
+
+The easiest way - just initialize Foil and your Vercel AI SDK calls are automatically traced:
 
 ```javascript
-import { openai } from '@ai-sdk/openai';
-import { streamText } from 'ai';
-import { createFoilTracer, createVercelAICallbacks } from '@foil-ai/sdk';
+const { Foil } = require('@foil/foil-js/otel');
+const { openai } = require('@ai-sdk/openai');
+const { streamText } = require('ai');
+
+// Initialize Foil once at app startup
+Foil.init({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'vercel-ai-agent',
+});
+
+// Use Vercel AI SDK as normal - automatically traced!
+const result = await streamText({
+  model: openai('gpt-4o'),
+  prompt: 'Write a haiku about coding',
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+// ↑ This call was automatically traced to Foil
+```
+
+## Manual Callbacks (Alternative)
+
+For more control over tracing, use the callbacks:
+
+```javascript
+const { openai } = require('@ai-sdk/openai');
+const { streamText } = require('ai');
+const { createFoilTracer, createVercelAICallbacks } = require('@foil/foil-js');
 
 const tracer = createFoilTracer({
   apiKey: process.env.FOIL_API_KEY,
-  agentName: 'vercel-ai-agent'
+  agentName: 'vercel-ai-agent',
 });
-```
 
-## Basic Usage
-
-Use the callbacks with `streamText`:
-
-```javascript
 await tracer.trace(async (ctx) => {
   const callbacks = createVercelAICallbacks(tracer, { context: ctx });
 
   const result = await streamText({
     model: openai('gpt-4o'),
     prompt: 'Write a haiku about coding',
-    ...callbacks
+    ...callbacks,
   });
 
   // Consume the stream
@@ -130,36 +153,71 @@ await tracer.trace(async (ctx) => {
 
 Integrate with Next.js API routes:
 
-```typescript
-// app/api/chat/route.ts
-import { openai } from '@ai-sdk/openai';
-import { streamText } from 'ai';
-import { createFoilTracer, createVercelAICallbacks } from '@foil-ai/sdk';
+<Tabs>
+  <Tab title="OpenTelemetry (Recommended)">
+    ```typescript
+    // instrumentation.ts (Next.js instrumentation file)
+    import { Foil } from '@foil/foil-js/otel';
 
-const tracer = createFoilTracer({
-  apiKey: process.env.FOIL_API_KEY!,
-  agentName: 'nextjs-chat'
-});
+    export function register() {
+      Foil.init({
+        apiKey: process.env.FOIL_API_KEY!,
+        agentName: 'nextjs-chat',
+      });
+    }
+    ```
 
-export async function POST(req: Request) {
-  const { messages } = await req.json();
+    ```typescript
+    // app/api/chat/route.ts
+    import { openai } from '@ai-sdk/openai';
+    import { streamText } from 'ai';
 
-  return await tracer.trace(async (ctx) => {
-    const callbacks = createVercelAICallbacks(tracer, { context: ctx });
+    export async function POST(req: Request) {
+      const { messages } = await req.json();
 
-    const result = await streamText({
-      model: openai('gpt-4o'),
-      messages,
-      ...callbacks
+      // Automatically traced!
+      const result = await streamText({
+        model: openai('gpt-4o'),
+        messages,
+      });
+
+      return result.toDataStreamResponse();
+    }
+    ```
+  </Tab>
+  <Tab title="Manual Callbacks">
+    ```typescript
+    // app/api/chat/route.ts
+    import { openai } from '@ai-sdk/openai';
+    import { streamText } from 'ai';
+    import { createFoilTracer, createVercelAICallbacks } from '@foil/foil-js';
+
+    const tracer = createFoilTracer({
+      apiKey: process.env.FOIL_API_KEY!,
+      agentName: 'nextjs-chat',
     });
 
-    return result.toDataStreamResponse();
-  }, {
-    name: 'chat-completion',
-    input: messages
-  });
-}
-```
+    export async function POST(req: Request) {
+      const { messages } = await req.json();
+
+      return await tracer.trace(async (ctx) => {
+        const callbacks = createVercelAICallbacks(tracer, { context: ctx });
+
+        const result = await streamText({
+          model: openai('gpt-4o'),
+          messages,
+          ...callbacks,
+        });
+
+        return result.toDataStreamResponse();
+      }, {
+        name: 'chat-completion',
+        input: messages,
+      });
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## With useChat Hook
 

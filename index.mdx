@@ -28,30 +28,85 @@ Building AI applications is hard. Debugging them is harder. Foil gives you the t
 
 ## How It Works
 
-<Steps>
-  <Step title="Install the SDK">
-    Add the Foil SDK to your project with npm or pip.
-    ```bash
-    npm install @foil-ai/sdk
-    ```
-  </Step>
-  <Step title="Instrument Your Code">
-    Wrap your AI calls with Foil's tracer to capture every interaction.
-    ```javascript
-    const tracer = createFoilTracer({
-      apiKey: 'your-api-key',
-      agentName: 'my-agent'
-    });
+Choose the integration method that works best for you:
 
-    await tracer.trace(async (ctx) => {
-      // Your AI logic here
-    });
-    ```
-  </Step>
-  <Step title="View in Dashboard">
-    See your traces, metrics, and alerts in the Foil dashboard.
-  </Step>
-</Steps>
+<Tabs>
+  <Tab title="OpenTelemetry (Recommended)">
+    Zero-code instrumentation with automatic tracing for OpenAI, Anthropic, LangChain, and more.
+
+    <Steps>
+      <Step title="Install the SDK">
+        ```bash
+        npm install @foil/foil-js
+        ```
+      </Step>
+      <Step title="Initialize Foil">
+        Add one line at the top of your app - all LLM calls are automatically traced.
+        ```javascript
+        const { Foil } = require('@foil/foil-js/otel');
+
+        // Initialize Foil with OpenTelemetry
+        Foil.init({
+          apiKey: process.env.FOIL_API_KEY,
+          agentName: 'my-agent',
+        });
+
+        // That's it! All OpenAI/Anthropic/LangChain calls are now traced
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hello!' }],
+        });
+        ```
+      </Step>
+      <Step title="View in Dashboard">
+        See your traces, metrics, and alerts in the Foil dashboard.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Native SDK">
+    Full control with manual tracing for custom instrumentation.
+
+    <Steps>
+      <Step title="Install the SDK">
+        ```bash
+        npm install @foil/foil-js
+        ```
+      </Step>
+      <Step title="Instrument Your Code">
+        Wrap your AI calls with Foil's tracer to capture every interaction.
+        ```javascript
+        const { createFoilTracer, SpanKind } = require('@foil/foil-js');
+
+        const tracer = createFoilTracer({
+          apiKey: process.env.FOIL_API_KEY,
+          agentName: 'my-agent',
+        });
+
+        await tracer.trace(async (ctx) => {
+          const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4', {
+            input: messages,
+          });
+
+          const response = await openai.chat.completions.create({
+            model: 'gpt-4',
+            messages,
+          });
+
+          await span.end({
+            output: response.choices[0].message.content,
+            tokens: response.usage,
+          });
+
+          return response;
+        }, { name: 'chat-completion' });
+        ```
+      </Step>
+      <Step title="View in Dashboard">
+        See your traces, metrics, and alerts in the Foil dashboard.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
 
 ## Features
 
@@ -69,10 +124,18 @@ Every AI interaction is captured as a **trace** containing multiple **spans**. S
 
 Foil uses LLM analysis to detect issues that traditional monitoring misses:
 
-- **Hallucination Detection** - Identifies fabricated facts in outputs
-- **Quality Analysis** - Catches off-topic or incomplete responses
+**Content Evaluations:**
+- **Hallucination Detection** - Identifies fabricated facts, fake entities, made-up citations
+- **Quality Analysis** - Catches off-topic, unhelpful, or incoherent responses
 - **Loop Detection** - Alerts when agents get stuck repeating themselves
-- **Content Safety** - Flags inappropriate or unsafe content
+- **Satisfaction Analysis** - Detects responses likely to leave users unsatisfied
+- **Frustration Detection** - Identifies user frustration signals in conversations
+- **Content Safety** - Flags inappropriate, explicit, or harmful content
+
+**Security Evaluations:**
+- **Prompt Injection** - Detects attempts to override instructions or extract system prompts
+- **PII Leakage** - Identifies exposed personal data (SSN, credit cards, phone numbers)
+- **Jailbreak Detection** - Catches bypass attempts like DAN, roleplay exploits
 
 ### Signals & Feedback
 
@@ -90,13 +153,13 @@ Capture user feedback and custom metrics directly tied to your traces:
   <Card title="Quickstart" icon="rocket" href="/quickstart">
     Get up and running in 5 minutes
   </Card>
+  <Card title="OpenTelemetry" icon="circle-nodes" href="/sdks/javascript/opentelemetry">
+    Zero-code auto-instrumentation
+  </Card>
   <Card title="JavaScript SDK" icon="js" href="/sdks/javascript/installation">
     Full-featured SDK with tracing support
   </Card>
   <Card title="Python SDK" icon="python" href="/sdks/python/installation">
     Lightweight SDK for Python apps
-  </Card>
-  <Card title="API Reference" icon="code" href="/api-reference/introduction">
-    Complete REST API documentation
   </Card>
 </CardGroup>

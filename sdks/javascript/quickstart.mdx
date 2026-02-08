@@ -12,7 +12,7 @@ Learn the basics of tracing AI calls with the Foil JavaScript SDK.
 The core concept is the **trace**. A trace represents a complete unit of work (like handling a user request) and contains one or more **spans** (individual operations).
 
 ```javascript
-import { createFoilTracer, SpanKind } from '@foil-ai/sdk';
+import { createFoilTracer, SpanKind } from '@foil/foil-js';
 
 const tracer = createFoilTracer({
   apiKey: process.env.FOIL_API_KEY,
@@ -45,7 +45,7 @@ const result = await tracer.trace(async (ctx) => {
 Foil supports several span types to categorize different operations:
 
 ```javascript
-import { SpanKind } from '@foil-ai/sdk';
+import { SpanKind } from '@foil/foil-js';
 
 SpanKind.AGENT      // 'agent' - Top-level agent operations
 SpanKind.LLM        // 'llm' - LLM API calls
@@ -185,7 +185,7 @@ const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
 
 ```javascript
 import OpenAI from 'openai';
-import { createFoilTracer, SpanKind } from '@foil-ai/sdk';
+import { createFoilTracer, SpanKind } from '@foil/foil-js';
 
 const openai = new OpenAI();
 const tracer = createFoilTracer({

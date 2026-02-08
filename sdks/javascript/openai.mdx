@@ -7,18 +7,44 @@ description: Automatically trace OpenAI API calls with the Foil JavaScript SDK
 
 The Foil SDK provides seamless integration with the OpenAI SDK, automatically capturing all API calls with full context.
 
-## Basic Setup
+## Quick Start (Recommended)
 
-Wrap your OpenAI client to enable automatic tracing:
+The easiest way to trace OpenAI calls - just initialize Foil and your calls are automatically traced:
 
 ```javascript
-import OpenAI from 'openai';
-import { createFoilTracer } from '@foil-ai/sdk';
+const { Foil } = require('@foil/foil-js/otel');
+const OpenAI = require('openai');
+
+// Initialize Foil once at app startup
+Foil.init({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent',
+});
+
+// Use OpenAI as normal - automatically traced!
+const openai = new OpenAI();
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Hello!' }],
+});
+
+console.log(response.choices[0].message.content);
+// ↑ This call was automatically traced to Foil
+```
+
+## Manual Wrapper (Alternative)
+
+For more control, use the `wrapOpenAI` method:
+
+```javascript
+const OpenAI = require('openai');
+const { createFoilTracer } = require('@foil/foil-js');
 
 const openai = new OpenAI();
 const tracer = createFoilTracer({
   apiKey: process.env.FOIL_API_KEY,
-  agentName: 'my-agent'
+  agentName: 'my-agent',
 });
 
 await tracer.trace(async (ctx) => {
@@ -28,7 +54,7 @@ await tracer.trace(async (ctx) => {
   // All calls are automatically traced
   const response = await wrappedOpenAI.chat.completions.create({
     model: 'gpt-4o',
-    messages: [{ role: 'user', content: 'Hello!' }]
+    messages: [{ role: 'user', content: 'Hello!' }],
   });
 
   return response.choices[0].message.content;
@@ -54,27 +80,56 @@ The wrapper automatically captures:
 
 Streaming is fully supported with accurate timing:
 
-```javascript
-await tracer.trace(async (ctx) => {
-  const wrappedOpenAI = tracer.wrapOpenAI(openai, { context: ctx });
+<Tabs>
+  <Tab title="OpenTelemetry">
+    ```javascript
+    const { Foil } = require('@foil/foil-js/otel');
+    const OpenAI = require('openai');
 
-  const stream = await wrappedOpenAI.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [{ role: 'user', content: 'Write a haiku' }],
-    stream: true
-  });
+    Foil.init({
+      apiKey: process.env.FOIL_API_KEY,
+      agentName: 'my-agent',
+    });
 
-  let content = '';
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta?.content || '';
-    content += delta;
-    process.stdout.write(delta);
-  }
+    const openai = new OpenAI();
 
-  // Span automatically ends with full content and TTFT
-  return content;
-});
-```
+    // Streaming works automatically
+    const stream = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'Write a haiku' }],
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      process.stdout.write(chunk.choices[0]?.delta?.content || '');
+    }
+    // ↑ Streaming call automatically traced with TTFT
+    ```
+  </Tab>
+  <Tab title="Manual Wrapper">
+    ```javascript
+    await tracer.trace(async (ctx) => {
+      const wrappedOpenAI = tracer.wrapOpenAI(openai, { context: ctx });
+
+      const stream = await wrappedOpenAI.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: 'Write a haiku' }],
+        stream: true,
+      });
+
+      let content = '';
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content || '';
+        content += delta;
+        process.stdout.write(delta);
+      }
+
+      // Span automatically ends with full content and TTFT
+      return content;
+    });
+    ```
+  </Tab>
+</Tabs>
 
 ## Tool/Function Calls
 
@@ -187,7 +242,7 @@ await tracer.trace(async (ctx) => {
 For simple one-off logging without full tracing:
 
 ```javascript
-import { Foil } from '@foil-ai/sdk';
+import { Foil } from '@foil/foil-js';
 
 const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,

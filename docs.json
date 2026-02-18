@@ -37,6 +37,7 @@
                 "group": "Integrations",
                 "pages": [
                   "sdks/javascript/openai",
+                  "sdks/javascript/openai-agents",
                   "sdks/javascript/vercel-ai",
                   "sdks/javascript/langchain"
                 ]
@@ -46,7 +47,8 @@
                 "pages": [
                   "sdks/python/installation",
                   "sdks/python/quickstart",
-                  "sdks/python/openai"
+                  "sdks/python/openai",
+                  "sdks/python/openai-agents"
                 ]
               }
             ]
@@ -90,6 +92,11 @@
     ],
     "global": {
       "anchors": [
+        {
+          "anchor": "Examples",
+          "href": "https://github.com/getfoil/foil-examples",
+          "icon": "code"
+        },
         {
           "anchor": "GitHub",
           "href": "https://github.com/getfoil",

@@ -1,0 +1,367 @@
+---
+title: OpenAI Agents SDK
+description: Trace OpenAI Agents SDK workflows with the Foil JavaScript SDK
+---
+
+# OpenAI Agents SDK
+
+The [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) (`@openai/agents`) is a framework for building multi-agent systems with Agents, Runner, handoffs, and guardrails in Node.js. Foil traces these agentic workflows using the manual tracer API — `createFoilTracer`, `ctx.startSpan`, and `span.end`.
+
+<Note>
+  Looking for basic OpenAI API tracing with `wrapOpenAI`? See the [OpenAI Integration](/sdks/javascript/openai) page instead.
+</Note>
+
+## Quick Start
+
+Install both packages:
+
+```bash
+npm install @getfoil/foil-js @openai/agents openai
+```
+
+Wrap your agent run in a Foil trace:
+
+```javascript
+const { createFoilTracer, SpanKind } = require('@getfoil/foil-js');
+const OpenAI = require('openai');
+
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent',
+});
+
+const openai = new OpenAI();
+
+await tracer.trace(async (ctx) => {
+  const llmSpan = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
+    input: [{ role: 'user', content: 'Hello!' }],
+  });
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: 'Hello!' }],
+  });
+
+  await llmSpan.end({
+    output: response.choices[0].message.content,
+    tokens: {
+      prompt: response.usage.prompt_tokens,
+      completion: response.usage.completion_tokens,
+    },
+  });
+
+  return response.choices[0].message.content;
+}, { name: 'agent-run', input: 'Hello!' });
+```
+
+## Tracing the Agent Loop
+
+For full observability of an agentic loop, create `SpanKind.LLM` spans for each model call and `SpanKind.TOOL` spans for tool executions. Use `parentSpanId` to nest tool spans under the LLM span that requested them.
+
+```javascript
+const { createFoilTracer, SpanKind } = require('@getfoil/foil-js');
+const OpenAI = require('openai');
+
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'weather-agent',
+});
+
+const openai = new OpenAI();
+
+const tools = [{
+  type: 'function',
+  function: {
+    name: 'get_weather',
+    description: 'Get weather for a location',
+    parameters: {
+      type: 'object',
+      properties: { location: { type: 'string' } },
+      required: ['location'],
+    },
+  },
+}];
+
+async function getWeather(location) {
+  return { location, temp: 72, condition: 'sunny' };
+}
+
+await tracer.trace(async (ctx) => {
+  const messages = [
+    { role: 'system', content: 'You are a helpful assistant.' },
+    { role: 'user', content: 'What is the weather in Paris?' },
+  ];
+
+  for (let i = 0; i < 10; i++) {
+    // LLM span
+    const llmSpan = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
+      input: messages,
+      properties: { iteration: i + 1 },
+    });
+    const llmSpanId = llmSpan.eventId;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages,
+      tools,
+      tool_choice: 'auto',
+    });
+
+    const message = response.choices[0].message;
+
+    await llmSpan.end({
+      output: message.content || message.tool_calls,
+      tokens: {
+        prompt: response.usage.prompt_tokens,
+        completion: response.usage.completion_tokens,
+      },
+    });
+
+    if (response.choices[0].finish_reason === 'stop') {
+      return message.content;
+    }
+
+    // Handle tool calls
+    if (message.tool_calls) {
+      messages.push(message);
+
+      for (const toolCall of message.tool_calls) {
+        const args = JSON.parse(toolCall.function.arguments);
+
+        // Tool span nested under the LLM span
+        const toolSpan = await ctx.startSpan(SpanKind.TOOL, toolCall.function.name, {
+          input: args,
+          properties: { toolCallId: toolCall.id },
+          parentSpanId: llmSpanId,
+        });
+
+        const result = await getWeather(args.location);
+        await toolSpan.end({ output: result });
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(result),
+        });
+      }
+    }
+  }
+}, {
+  name: 'weather-lookup',
+  input: 'What is the weather in Paris?',
+});
+```
+
+Creates a trace like:
+
+```
+Trace: weather-agent
+├── LLM: gpt-4o (tool_calls requested)
+│   └── TOOL: get_weather
+└── LLM: gpt-4o (final response)
+```
+
+## Tool Call Tracing
+
+For simpler cases, use `ctx.tool()` as a convenience wrapper. It creates a TOOL span, calls your function, and ends the span automatically.
+
+```javascript
+await tracer.trace(async (ctx) => {
+  // Using the convenience method
+  const weather = await ctx.tool('get_weather', async () => {
+    return await getWeather('Paris');
+  });
+
+  // Equivalent to:
+  const toolSpan = await ctx.startSpan(SpanKind.TOOL, 'get_weather', {
+    input: 'Paris',
+  });
+  const result = await getWeather('Paris');
+  await toolSpan.end({ output: result });
+});
+```
+
+## Multi-Agent Handoffs
+
+When one agent delegates to another, use `span.createChildContext()` to create nested AGENT spans. This preserves the parent-child hierarchy in the Foil dashboard.
+
+```javascript
+await tracer.trace(async (ctx) => {
+  // Primary agent span
+  const coordinatorSpan = await ctx.startSpan(SpanKind.AGENT, 'coordinator', {
+    input: 'Plan a trip to Tokyo',
+  });
+
+  // Create child context for delegated agents
+  const childCtx = coordinatorSpan.createChildContext();
+
+  // Delegated agent: flight search
+  const flightSpan = await childCtx.startSpan(SpanKind.AGENT, 'flight-searcher', {
+    input: 'Find flights to Tokyo',
+  });
+  const llmSpan = await childCtx.startSpan(SpanKind.LLM, 'gpt-4o', {
+    input: [{ role: 'user', content: 'Find flights to Tokyo' }],
+  });
+  // ... LLM call ...
+  await llmSpan.end({ output: 'Found 3 flights', tokens: { prompt: 50, completion: 100 } });
+  await flightSpan.end({ output: 'Flight options compiled' });
+
+  // Delegated agent: hotel search
+  const hotelSpan = await childCtx.startSpan(SpanKind.AGENT, 'hotel-searcher', {
+    input: 'Find hotels in Tokyo',
+  });
+  // ... hotel search logic ...
+  await hotelSpan.end({ output: 'Hotel options compiled' });
+
+  await coordinatorSpan.end({ output: 'Trip plan complete' });
+});
+```
+
+Creates a trace like:
+
+```
+Trace: trip-planner
+└── AGENT: coordinator
+    ├── AGENT: flight-searcher
+    │   └── LLM: gpt-4o
+    └── AGENT: hotel-searcher
+```
+
+## Complete Example
+
+A full working agent with tool calls, multiple iterations, and comprehensive tracing:
+
+```javascript
+const OpenAI = require('openai');
+const { createFoilTracer, SpanKind } = require('@getfoil/foil-js');
+
+const openai = new OpenAI();
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'openai-agent',
+});
+
+const tools = [
+  {
+    type: 'function',
+    function: {
+      name: 'get_weather',
+      description: 'Get weather for a location',
+      parameters: {
+        type: 'object',
+        properties: { location: { type: 'string' } },
+        required: ['location'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'calculate',
+      description: 'Evaluate a math expression',
+      parameters: {
+        type: 'object',
+        properties: { expression: { type: 'string' } },
+        required: ['expression'],
+      },
+    },
+  },
+];
+
+const toolFns = {
+  get_weather: async (args) => ({ location: args.location, temp: 72, condition: 'sunny' }),
+  calculate: async (args) => ({ expression: args.expression, result: eval(args.expression) }),
+};
+
+const result = await tracer.trace(async (ctx) => {
+  const messages = [
+    { role: 'system', content: 'You are a helpful assistant with weather and calculator tools.' },
+    { role: 'user', content: 'What is the weather in SF? Also, what is 15 * 7 + 23?' },
+  ];
+
+  for (let i = 0; i < 10; i++) {
+    const llmSpan = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
+      input: messages,
+      properties: { iteration: i + 1 },
+    });
+    const llmSpanId = llmSpan.eventId;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages,
+      tools,
+      tool_choice: 'auto',
+    });
+
+    const message = response.choices[0].message;
+    const finishReason = response.choices[0].finish_reason;
+
+    await llmSpan.end({
+      output: message.content || message.tool_calls,
+      tokens: {
+        prompt: response.usage.prompt_tokens,
+        completion: response.usage.completion_tokens,
+        total: response.usage.total_tokens,
+      },
+    });
+
+    if (finishReason === 'stop') {
+      return message.content;
+    }
+
+    if (finishReason === 'tool_calls' && message.tool_calls) {
+      messages.push(message);
+
+      for (const toolCall of message.tool_calls) {
+        const toolName = toolCall.function.name;
+        const toolArgs = JSON.parse(toolCall.function.arguments);
+
+        const toolSpan = await ctx.startSpan(SpanKind.TOOL, toolName, {
+          input: toolArgs,
+          properties: { toolCallId: toolCall.id },
+          parentSpanId: llmSpanId,
+        });
+
+        try {
+          const toolResult = await toolFns[toolName](toolArgs);
+          await toolSpan.end({ output: toolResult });
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(toolResult),
+          });
+        } catch (error) {
+          await toolSpan.end({ error: { type: error.name, message: error.message } });
+          throw error;
+        }
+      }
+    }
+  }
+
+  return 'Max iterations reached';
+}, {
+  name: 'agent-conversation',
+  input: 'What is the weather in SF? Also, what is 15 * 7 + 23?',
+  properties: { model: 'gpt-4o', maxIterations: 10 },
+});
+
+console.log(result);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="OpenAI Integration" icon="bolt" href="/sdks/javascript/openai">
+    Automatic tracing with wrapOpenAI
+  </Card>
+  <Card title="Vercel AI SDK" icon="triangle" href="/sdks/javascript/vercel-ai">
+    Trace Vercel AI SDK calls
+  </Card>
+  <Card title="Manual Tracing" icon="code" href="/sdks/javascript/tracing">
+    Full tracer API reference
+  </Card>
+  <Card title="Concepts: Spans" icon="layer-group" href="/concepts/spans">
+    Understand span types and hierarchy
+  </Card>
+</CardGroup>

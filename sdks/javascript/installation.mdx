@@ -15,19 +15,19 @@ The Foil JavaScript SDK provides full-featured tracing, logging, and feedback co
 ## Install via npm
 
 ```bash
-npm install @foil/foil-js
+npm install @getfoil/foil-js
 ```
 
 Or with yarn:
 
 ```bash
-yarn add @foil/foil-js
+yarn add @getfoil/foil-js
 ```
 
 Or with pnpm:
 
 ```bash
-pnpm add @foil/foil-js
+pnpm add @getfoil/foil-js
 ```
 
 ## Configuration
@@ -48,7 +48,7 @@ FOIL_API_KEY=sk_live_xxx_yyy
 ### Initialize the Tracer
 
 ```javascript
-import { createFoilTracer } from '@foil/foil-js';
+import { createFoilTracer } from '@getfoil/foil-js';
 
 const tracer = createFoilTracer({
   apiKey: process.env.FOIL_API_KEY,
@@ -90,20 +90,13 @@ Debug output shows:
 - Timing information
 - API call results
 
-## TypeScript Support
+## Usage
 
-The SDK is written in TypeScript and includes full type definitions:
+```javascript
+const { createFoilTracer, SpanKind } = require('@getfoil/foil-js');
 
-```typescript
-import {
-  createFoilTracer,
-  FoilTracer,
-  TraceContext,
-  SpanKind
-} from '@foil/foil-js';
-
-const tracer: FoilTracer = createFoilTracer({
-  apiKey: process.env.FOIL_API_KEY!,
+const tracer = createFoilTracer({
+  apiKey: process.env.FOIL_API_KEY,
   agentName: 'my-agent'
 });
 ```

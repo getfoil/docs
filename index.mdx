@@ -37,13 +37,13 @@ Choose the integration method that works best for you:
     <Steps>
       <Step title="Install the SDK">
         ```bash
-        npm install @foil/foil-js
+        npm install @getfoil/foil-js
         ```
       </Step>
       <Step title="Initialize Foil">
         Add one line at the top of your app - all LLM calls are automatically traced.
         ```javascript
-        const { Foil } = require('@foil/foil-js/otel');
+        const { Foil } = require('@getfoil/foil-js/otel');
 
         // Initialize Foil with OpenTelemetry
         Foil.init({
@@ -69,13 +69,13 @@ Choose the integration method that works best for you:
     <Steps>
       <Step title="Install the SDK">
         ```bash
-        npm install @foil/foil-js
+        npm install @getfoil/foil-js
         ```
       </Step>
       <Step title="Instrument Your Code">
         Wrap your AI calls with Foil's tracer to capture every interaction.
         ```javascript
-        const { createFoilTracer, SpanKind } = require('@foil/foil-js');
+        const { createFoilTracer, SpanKind } = require('@getfoil/foil-js');
 
         const tracer = createFoilTracer({
           apiKey: process.env.FOIL_API_KEY,

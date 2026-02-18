@@ -13,6 +13,7 @@ Foil provides official SDKs for JavaScript and Python. Both SDKs offer core func
 |---------|------------|--------|
 | Basic Logging | Yes | Yes |
 | OpenAI Wrapper | Yes | Yes |
+| OpenAI Agents SDK | Yes | Yes |
 | Distributed Tracing | Yes | - |
 | Automatic Span Hierarchy | Yes | - |
 | LangChain Integration | Yes | - |
@@ -20,6 +21,10 @@ Foil provides official SDKs for JavaScript and Python. Both SDKs offer core func
 | Tool Call Tracking | Yes | Yes |
 | Signal Recording | Yes | - |
 | Streaming Support | Yes | Yes |
+
+<Tip>
+  **Examples**: Browse complete, runnable examples for both SDKs at [github.com/getfoil/foil-examples](https://github.com/getfoil/foil-examples).
+</Tip>
 
 ## JavaScript SDK
 
@@ -32,7 +37,7 @@ The JavaScript SDK is our most full-featured SDK, designed for complex AI applic
 - LangChain and Vercel AI integrations
 
 ```bash
-npm install @foil/foil-js
+npm install @getfoil/foil-js
 ```
 
 <Card title="JavaScript SDK Docs" icon="js" href="/sdks/javascript/installation">
@@ -44,7 +49,7 @@ npm install @foil/foil-js
 **FoilTracer** - High-level tracing API with automatic span management:
 
 ```javascript
-import { createFoilTracer, SpanKind } from '@foil/foil-js';
+import { createFoilTracer, SpanKind } from '@getfoil/foil-js';
 
 const tracer = createFoilTracer({
   apiKey: 'your-api-key',
@@ -67,11 +72,11 @@ await tracer.trace(async (ctx) => {
 
 ```javascript
 // LangChain
-import { createLangChainCallback } from '@foil/foil-js';
+import { createLangChainCallback } from '@getfoil/foil-js';
 const callbacks = createLangChainCallback(tracer);
 
 // Vercel AI SDK
-import { createVercelAICallbacks } from '@foil/foil-js';
+import { createVercelAICallbacks } from '@getfoil/foil-js';
 const callbacks = createVercelAICallbacks(tracer);
 ```
 

@@ -53,7 +53,7 @@ await tracer.trace(async (ctx) => {
 ### Low-Level API
 
 ```javascript
-import { Foil } from '@foil/foil-js';
+import { Foil } from '@getfoil/foil-js';
 
 const foil = new Foil({ apiKey: process.env.FOIL_API_KEY });
 
@@ -226,6 +226,10 @@ await ctx.recordSignal('coherence', 0.9, {
   modelUsed: 'gpt-4o-mini'
 });
 ```
+
+<Tip>
+  **Full example**: [customer-support-agent](https://github.com/getfoil/foil-examples/tree/main/customer-support-agent) — records feedback signals (thumbs up/down) on every conversation trace.
+</Tip>
 
 ## Best Practices
 

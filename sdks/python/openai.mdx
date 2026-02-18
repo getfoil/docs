@@ -5,7 +5,19 @@ description: Automatically trace OpenAI API calls with the Foil Python SDK
 
 # OpenAI Integration
 
+<Warning>
+  The Python SDK documentation is a work in progress. Content may be incomplete or subject to change.
+</Warning>
+
 The Foil Python SDK provides a wrapper for the OpenAI client that automatically traces all API calls.
+
+<Note>
+  Building with the **OpenAI Agents SDK** (`openai-agents`)? See the [OpenAI Agents SDK](/sdks/python/openai-agents) page for tracing multi-agent workflows, handoffs, and guardrails.
+</Note>
+
+<Tip>
+  **Full examples**: Browse runnable examples at [github.com/getfoil/foil-examples](https://github.com/getfoil/foil-examples).
+</Tip>
 
 ## Basic Setup
 
@@ -225,6 +237,9 @@ if __name__ == '__main__':
 ## Next Steps
 
 <CardGroup cols={2}>
+  <Card title="OpenAI Agents SDK" icon="robot" href="/sdks/python/openai-agents">
+    Trace multi-agent workflows
+  </Card>
   <Card title="Concepts: Traces" icon="diagram-project" href="/concepts/traces">
     Learn about distributed tracing
   </Card>

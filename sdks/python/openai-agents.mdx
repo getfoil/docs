@@ -1,0 +1,474 @@
+---
+title: OpenAI Agents SDK
+description: Trace OpenAI Agents SDK workflows with the Foil Python SDK
+---
+
+# OpenAI Agents SDK
+
+<Warning>
+  The Python SDK documentation is a work in progress. Content may be incomplete or subject to change.
+</Warning>
+
+The [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) (`openai-agents`) is a framework for building multi-agent systems with Agents, Runner, handoffs, and guardrails. Foil traces these agentic workflows using the manual tracer API — `create_foil_tracer`, `ctx.start_span`, and `span.end`.
+
+<Note>
+  Looking for basic OpenAI API tracing with `wrap_openai`? See the [OpenAI Integration](/sdks/python/openai) page instead.
+</Note>
+
+## Quick Start
+
+Install both packages:
+
+```bash
+pip install foil-sdk openai-agents
+```
+
+Wrap your agent run in a Foil trace:
+
+```python
+from openai import OpenAI
+from agents import Agent, Runner
+from foil import create_foil_tracer, SpanKind
+import os
+
+tracer = create_foil_tracer(
+    api_key=os.environ['FOIL_API_KEY'],
+    agent_name='my-agent',
+)
+
+agent = Agent(
+    name='assistant',
+    instructions='You are a helpful assistant.',
+)
+
+def run(ctx):
+    result = Runner.run_sync(agent, 'What is the capital of France?')
+    return result.final_output
+
+output = tracer.trace(run, name='agent-run', input='What is the capital of France?')
+print(output)
+```
+
+## Tracing Agent Runs
+
+For full observability, create spans for each step in the agent loop. Use `SpanKind.AGENT` for the agent itself, `SpanKind.LLM` for completions, and `SpanKind.TOOL` for tool calls.
+
+```python
+from foil import create_foil_tracer, SpanKind
+from openai import OpenAI
+import json
+
+tracer = create_foil_tracer(
+    api_key=os.environ['FOIL_API_KEY'],
+    agent_name='weather-agent',
+)
+
+openai_client = OpenAI()
+
+tools = [
+    {
+        'type': 'function',
+        'function': {
+            'name': 'get_weather',
+            'description': 'Get weather for a location',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'location': {'type': 'string'}
+                },
+                'required': ['location'],
+            },
+        },
+    }
+]
+
+def get_weather(location: str) -> dict:
+    return {'location': location, 'temp': 72, 'condition': 'sunny'}
+
+
+def agent_fn(ctx):
+    messages = [
+        {'role': 'system', 'content': 'You are a helpful assistant.'},
+        {'role': 'user', 'content': 'What is the weather in Paris?'},
+    ]
+
+    while True:
+        # LLM span
+        llm_span = ctx.start_span(SpanKind.LLM, 'gpt-4o', {'input': messages})
+
+        response = openai_client.chat.completions.create(
+            model='gpt-4o',
+            messages=messages,
+            tools=tools,
+            tool_choice='auto',
+        )
+
+        message = response.choices[0].message
+        llm_span.end({
+            'output': message.content or message.tool_calls,
+            'tokens': {
+                'prompt': response.usage.prompt_tokens,
+                'completion': response.usage.completion_tokens,
+            },
+        })
+
+        if response.choices[0].finish_reason == 'stop':
+            return message.content
+
+        # Handle tool calls
+        if message.tool_calls:
+            messages.append({
+                'role': 'assistant',
+                'content': message.content,
+                'tool_calls': [
+                    {
+                        'id': tc.id,
+                        'type': tc.type,
+                        'function': {
+                            'name': tc.function.name,
+                            'arguments': tc.function.arguments,
+                        },
+                    }
+                    for tc in message.tool_calls
+                ],
+            })
+
+            for tc in message.tool_calls:
+                args = json.loads(tc.function.arguments)
+
+                # Tool span
+                tool_span = ctx.start_span(
+                    SpanKind.TOOL, tc.function.name, {'input': args}
+                )
+                result = get_weather(**args)
+                tool_span.end({'output': result})
+
+                messages.append({
+                    'role': 'tool',
+                    'tool_call_id': tc.id,
+                    'content': json.dumps(result),
+                })
+
+tracer.trace(agent_fn, name='weather-lookup', input='What is the weather in Paris?')
+```
+
+Creates a trace like:
+
+```
+Trace: weather-agent
+├── LLM: gpt-4o (tool_calls requested)
+├── TOOL: get_weather
+└── LLM: gpt-4o (final response)
+```
+
+## Tool Call Tracing
+
+For simpler cases, use `ctx.tool()` as a convenience wrapper. It automatically creates a TOOL span, calls your function, and ends the span with the result.
+
+```python
+def agent_fn(ctx):
+    # Using the convenience method
+    weather = ctx.tool('get_weather', lambda: get_weather('Paris'))
+
+    # Equivalent to:
+    tool_span = ctx.start_span(SpanKind.TOOL, 'get_weather', {'input': 'Paris'})
+    weather = get_weather('Paris')
+    tool_span.end({'output': weather})
+```
+
+## Multi-Agent Handoffs
+
+When one agent delegates to another, use `span.create_child_context()` to create nested AGENT spans. This preserves the parent-child hierarchy in the Foil dashboard.
+
+```python
+def agent_fn(ctx):
+    # Primary agent span
+    coordinator_span = ctx.start_span(
+        SpanKind.AGENT, 'coordinator',
+        {'input': 'Plan a trip to Tokyo'},
+    )
+
+    # Create child context for delegated agent
+    child_ctx = coordinator_span.create_child_context()
+
+    # Delegated agent: flight search
+    flight_span = child_ctx.start_span(
+        SpanKind.AGENT, 'flight-searcher',
+        {'input': 'Find flights to Tokyo'},
+    )
+
+    llm_span = child_ctx.start_span(SpanKind.LLM, 'gpt-4o', {
+        'input': [{'role': 'user', 'content': 'Find flights to Tokyo'}],
+    })
+    # ... LLM call ...
+    llm_span.end({'output': 'Found 3 flights', 'tokens': {'prompt': 50, 'completion': 100}})
+
+    flight_span.end({'output': 'Flight options compiled'})
+
+    # Delegated agent: hotel search
+    hotel_span = child_ctx.start_span(
+        SpanKind.AGENT, 'hotel-searcher',
+        {'input': 'Find hotels in Tokyo'},
+    )
+    # ... hotel search logic ...
+    hotel_span.end({'output': 'Hotel options compiled'})
+
+    coordinator_span.end({'output': 'Trip plan complete'})
+
+tracer.trace(agent_fn, name='trip-planner', input='Plan a trip to Tokyo')
+```
+
+Creates a trace like:
+
+```
+Trace: trip-planner
+└── AGENT: coordinator
+    ├── AGENT: flight-searcher
+    │   └── LLM: gpt-4o
+    └── AGENT: hotel-searcher
+```
+
+## Guardrails Tracing
+
+Trace input and output guardrail checks as separate spans so you can monitor their latency and results.
+
+```python
+def agent_fn(ctx):
+    user_input = 'How do I hack a server?'
+
+    # Input guardrail span
+    guard_span = ctx.start_span(
+        SpanKind.CHAIN, 'input-guardrail',
+        {'input': user_input},
+    )
+    is_safe = check_input_guardrail(user_input)
+    guard_span.end({
+        'output': {'safe': is_safe},
+        'properties': {'guardrail_type': 'input'},
+    })
+
+    if not is_safe:
+        return 'Request blocked by guardrail'
+
+    # Continue with LLM call...
+    llm_span = ctx.start_span(SpanKind.LLM, 'gpt-4o', {'input': user_input})
+    response = call_llm(user_input)
+    llm_span.end({'output': response})
+
+    # Output guardrail span
+    output_guard = ctx.start_span(
+        SpanKind.CHAIN, 'output-guardrail',
+        {'input': response},
+    )
+    output_safe = check_output_guardrail(response)
+    output_guard.end({
+        'output': {'safe': output_safe},
+        'properties': {'guardrail_type': 'output'},
+    })
+
+    return response if output_safe else 'Response blocked by guardrail'
+```
+
+## Streaming Support
+
+Track time-to-first-token (TTFT) with streaming responses:
+
+```python
+import time
+
+def agent_fn(ctx):
+    llm_span = ctx.start_span(SpanKind.LLM, 'gpt-4o', {
+        'input': [{'role': 'user', 'content': 'Write a poem'}],
+    })
+
+    stream = openai_client.chat.completions.create(
+        model='gpt-4o',
+        messages=[{'role': 'user', 'content': 'Write a poem'}],
+        stream=True,
+    )
+
+    content = ''
+    ttft = None
+    start = time.time()
+
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content or ''
+        if delta and ttft is None:
+            ttft = int((time.time() - start) * 1000)
+        content += delta
+
+    llm_span.end({
+        'output': content,
+        'ttft': ttft,
+    })
+
+    return content
+```
+
+## Complete Example
+
+A full working agent with tool calls, multiple iterations, and comprehensive tracing:
+
+```python
+import os
+import json
+from openai import OpenAI
+from foil import create_foil_tracer, SpanKind
+
+openai_client = OpenAI()
+
+tracer = create_foil_tracer(
+    api_key=os.environ['FOIL_API_KEY'],
+    agent_name='openai-agent',
+)
+
+tools = [
+    {
+        'type': 'function',
+        'function': {
+            'name': 'get_weather',
+            'description': 'Get weather for a location',
+            'parameters': {
+                'type': 'object',
+                'properties': {'location': {'type': 'string'}},
+                'required': ['location'],
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'calculate',
+            'description': 'Evaluate a math expression',
+            'parameters': {
+                'type': 'object',
+                'properties': {'expression': {'type': 'string'}},
+                'required': ['expression'],
+            },
+        },
+    },
+]
+
+tool_fns = {
+    'get_weather': lambda args: {
+        'location': args['location'], 'temp': 72, 'condition': 'sunny'
+    },
+    'calculate': lambda args: {
+        'expression': args['expression'], 'result': eval(args['expression'])
+    },
+}
+
+
+def agent_fn(ctx):
+    messages = [
+        {'role': 'system', 'content': 'You are a helpful assistant with weather and calculator tools.'},
+        {'role': 'user', 'content': 'What is the weather in SF? Also, what is 15 * 7 + 23?'},
+    ]
+
+    for iteration in range(10):
+        # LLM span
+        llm_span = ctx.start_span(SpanKind.LLM, 'gpt-4o', {
+            'input': messages,
+            'properties': {'iteration': iteration + 1},
+        })
+
+        response = openai_client.chat.completions.create(
+            model='gpt-4o',
+            messages=messages,
+            tools=tools,
+            tool_choice='auto',
+        )
+
+        message = response.choices[0].message
+        finish_reason = response.choices[0].finish_reason
+
+        llm_span.end({
+            'output': message.content or message.tool_calls,
+            'tokens': {
+                'prompt': response.usage.prompt_tokens,
+                'completion': response.usage.completion_tokens,
+                'total': response.usage.total_tokens,
+            },
+        })
+
+        if finish_reason == 'stop':
+            return message.content
+
+        if finish_reason == 'tool_calls' and message.tool_calls:
+            messages.append({
+                'role': 'assistant',
+                'content': message.content,
+                'tool_calls': [
+                    {
+                        'id': tc.id,
+                        'type': tc.type,
+                        'function': {
+                            'name': tc.function.name,
+                            'arguments': tc.function.arguments,
+                        },
+                    }
+                    for tc in message.tool_calls
+                ],
+            })
+
+            for tc in message.tool_calls:
+                args = json.loads(tc.function.arguments)
+
+                tool_span = ctx.start_span(SpanKind.TOOL, tc.function.name, {
+                    'input': args,
+                    'properties': {'toolCallId': tc.id},
+                })
+
+                try:
+                    result = tool_fns[tc.function.name](args)
+                    tool_span.end({'output': result})
+                except Exception as e:
+                    tool_span.end({'error': {'type': type(e).__name__, 'message': str(e)}})
+                    raise
+
+                messages.append({
+                    'role': 'tool',
+                    'tool_call_id': tc.id,
+                    'content': json.dumps(result),
+                })
+
+    return 'Max iterations reached'
+
+
+result = tracer.trace(
+    agent_fn,
+    name='agent-conversation',
+    input='What is the weather in SF? Also, what is 15 * 7 + 23?',
+    properties={'model': 'gpt-4o', 'maxIterations': 10},
+)
+
+print(result)
+```
+
+## What Gets Captured
+
+| Agents SDK Concept | Foil Span Type | Description |
+|--------------------|----------------|-------------|
+| Agent run | `tracer.trace()` | Top-level trace for the full agent execution |
+| LLM completion | `SpanKind.LLM` | Each call to the model, with tokens and latency |
+| Tool call | `SpanKind.TOOL` | Individual tool executions with input/output |
+| Agent handoff | `SpanKind.AGENT` | Delegated agent as a nested span via `create_child_context()` |
+| Guardrail check | `SpanKind.CHAIN` | Input/output validation steps |
+| Multi-step loop | Multiple LLM spans | Each iteration creates a separate LLM span |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="OpenAI Integration" icon="bolt" href="/sdks/python/openai">
+    Automatic tracing with wrap_openai
+  </Card>
+  <Card title="Concepts: Traces" icon="diagram-project" href="/concepts/traces">
+    Learn about distributed tracing
+  </Card>
+  <Card title="Concepts: Spans" icon="layer-group" href="/concepts/spans">
+    Understand span types and hierarchy
+  </Card>
+  <Card title="Alerting" icon="bell" href="/features/alerting">
+    Set up alerts for agent issues
+  </Card>
+</CardGroup>

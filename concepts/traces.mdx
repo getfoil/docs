@@ -44,7 +44,7 @@ Every trace has:
 <Tabs>
   <Tab title="JavaScript">
     ```javascript
-    import { createFoilTracer } from '@foil/foil-js';
+    import { createFoilTracer } from '@getfoil/foil-js';
 
     const tracer = createFoilTracer({
       apiKey: process.env.FOIL_API_KEY,
@@ -178,13 +178,13 @@ In the Foil dashboard, traces show:
   </Accordion>
 
   <Accordion title="Include conversation IDs">
-    For chat applications, include a `convoId` to group traces from the same conversation.
+    For chat applications, include a `sessionId` to group traces from the same conversation.
     ```javascript
     await tracer.trace(async (ctx) => {
       // ...
     }, {
       name: 'chat-message',
-      convoId: sessionId  // Links all messages in this chat
+      sessionId: sessionId  // Links all messages in this chat
     });
     ```
   </Accordion>

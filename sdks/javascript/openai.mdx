@@ -7,12 +7,20 @@ description: Automatically trace OpenAI API calls with the Foil JavaScript SDK
 
 The Foil SDK provides seamless integration with the OpenAI SDK, automatically capturing all API calls with full context.
 
+<Note>
+  Building with the **OpenAI Agents SDK** (`@openai/agents`)? See the [OpenAI Agents SDK](/sdks/javascript/openai-agents) page for tracing multi-agent workflows, handoffs, and guardrails.
+</Note>
+
+<Tip>
+  **Full examples**: [customer-support-agent](https://github.com/getfoil/foil-examples/tree/main/customer-support-agent) — same agent in two flavors: [native SDK](https://github.com/getfoil/foil-examples/blob/main/customer-support-agent/agent-native-sdk.js) and [OTEL auto-instrumentation](https://github.com/getfoil/foil-examples/blob/main/customer-support-agent/agent-otel.js)
+</Tip>
+
 ## Quick Start (Recommended)
 
 The easiest way to trace OpenAI calls - just initialize Foil and your calls are automatically traced:
 
 ```javascript
-const { Foil } = require('@foil/foil-js/otel');
+const { Foil } = require('@getfoil/foil-js/otel');
 const OpenAI = require('openai');
 
 // Initialize Foil once at app startup
@@ -39,7 +47,7 @@ For more control, use the `wrapOpenAI` method:
 
 ```javascript
 const OpenAI = require('openai');
-const { createFoilTracer } = require('@foil/foil-js');
+const { createFoilTracer } = require('@getfoil/foil-js');
 
 const openai = new OpenAI();
 const tracer = createFoilTracer({
@@ -83,7 +91,7 @@ Streaming is fully supported with accurate timing:
 <Tabs>
   <Tab title="OpenTelemetry">
     ```javascript
-    const { Foil } = require('@foil/foil-js/otel');
+    const { Foil } = require('@getfoil/foil-js/otel');
     const OpenAI = require('openai');
 
     Foil.init({
@@ -242,7 +250,7 @@ await tracer.trace(async (ctx) => {
 For simple one-off logging without full tracing:
 
 ```javascript
-import { Foil } from '@foil/foil-js';
+import { Foil } from '@getfoil/foil-js';
 
 const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
@@ -296,6 +304,9 @@ await tracer.trace(async (ctx) => {
 ## Next Steps
 
 <CardGroup cols={2}>
+  <Card title="OpenAI Agents SDK" icon="robot" href="/sdks/javascript/openai-agents">
+    Trace multi-agent workflows
+  </Card>
   <Card title="LangChain Integration" icon="link" href="/sdks/javascript/langchain">
     Trace LangChain workflows
   </Card>

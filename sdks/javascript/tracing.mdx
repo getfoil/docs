@@ -7,6 +7,10 @@ description: Deep dive into distributed tracing with the Foil JavaScript SDK
 
 The Foil JavaScript SDK provides comprehensive distributed tracing for complex AI applications. This guide covers advanced tracing patterns for multi-step agent workflows.
 
+<Tip>
+  **Full examples**: [customer-support-agent](https://github.com/getfoil/foil-examples/tree/main/customer-support-agent) (native SDK tracing with tools) | [rag-agent](https://github.com/getfoil/foil-examples/tree/main/rag-agent) (retriever spans and LLM synthesis)
+</Tip>
+
 ## Trace Architecture
 
 A **trace** represents a complete request or workflow. Each trace contains multiple **spans** organized in a tree structure:
@@ -38,7 +42,7 @@ const result = await tracer.trace(async (ctx) => {
 }, {
   name: 'process-request',  // Optional trace name
   traceId: 'custom-id',     // Optional: provide your own trace ID
-  convoId: 'conv-123',      // Optional: conversation/session ID
+  sessionId: 'conv-123',    // Optional: conversation/session ID
   input: userQuery,         // Optional: trace-level input
   properties: {             // Optional: custom metadata
     userId: 'user-123'
@@ -268,7 +272,7 @@ for (const item of items) {
 For non-critical telemetry, use the low-level logging API:
 
 ```javascript
-import { Foil } from '@foil/foil-js';
+import { Foil } from '@getfoil/foil-js';
 
 const foil = new Foil({ apiKey: process.env.FOIL_API_KEY });
 

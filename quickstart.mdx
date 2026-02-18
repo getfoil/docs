@@ -18,12 +18,12 @@ This guide will get you from zero to traced AI calls in under 5 minutes.
 <Tabs>
   <Tab title="JavaScript">
     ```bash
-    npm install @foil/foil-js
+    npm install @getfoil/foil-js
     ```
   </Tab>
   <Tab title="Python">
     ```bash
-    pip install foil-ai
+    pip install foil-sdk
     ```
   </Tab>
 </Tabs>
@@ -35,7 +35,7 @@ This guide will get you from zero to traced AI calls in under 5 minutes.
     The easiest way to get started - one line and all your LLM calls are traced automatically.
 
     ```javascript
-    const { Foil } = require('@foil/foil-js/otel');
+    const { Foil } = require('@getfoil/foil-js/otel');
 
     // Initialize at the top of your app
     Foil.init({
@@ -48,7 +48,7 @@ This guide will get you from zero to traced AI calls in under 5 minutes.
     For more control over what gets traced.
 
     ```javascript
-    const { createFoilTracer } = require('@foil/foil-js');
+    const { createFoilTracer } = require('@getfoil/foil-js');
 
     const tracer = createFoilTracer({
       apiKey: process.env.FOIL_API_KEY,
@@ -73,7 +73,7 @@ This guide will get you from zero to traced AI calls in under 5 minutes.
     With OpenTelemetry, your LLM calls are traced automatically - no extra code needed!
 
     ```javascript
-    const { Foil } = require('@foil/foil-js/otel');
+    const { Foil } = require('@getfoil/foil-js/otel');
     const OpenAI = require('openai');
 
     // Initialize Foil (do this once at app startup)
@@ -98,7 +98,7 @@ This guide will get you from zero to traced AI calls in under 5 minutes.
     Manual tracing gives you full control over span creation.
 
     ```javascript
-    const { createFoilTracer, SpanKind } = require('@foil/foil-js');
+    const { createFoilTracer, SpanKind } = require('@getfoil/foil-js');
     const OpenAI = require('openai');
 
     const openai = new OpenAI();
@@ -188,6 +188,10 @@ You'll see:
   </Card>
 </CardGroup>
 
+<Tip>
+  **More examples**: Browse complete, runnable examples at [github.com/getfoil/foil-examples](https://github.com/getfoil/foil-examples) — including OTEL auto-instrumentation, custom evaluations, semantic search, and real-world agent scenarios.
+</Tip>
+
 ## Complete Example
 
 Here's a full working example you can copy and run:
@@ -196,7 +200,7 @@ Here's a full working example you can copy and run:
   <Tab title="JavaScript">
     ```javascript
     // app.js
-    const { Foil } = require('@foil/foil-js/otel');
+    const { Foil } = require('@getfoil/foil-js/otel');
     const OpenAI = require('openai');
 
     // Initialize Foil at startup

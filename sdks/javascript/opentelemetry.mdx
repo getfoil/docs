@@ -29,13 +29,13 @@ Foil supports [OpenTelemetry](https://opentelemetry.io/) for automatic instrumen
 ### Installation
 
 ```bash
-npm install @foil/foil-js
+npm install @getfoil/foil-js
 ```
 
 ### Basic Setup
 
 ```javascript
-const { Foil } = require('@foil/foil-js/otel');
+const { Foil } = require('@getfoil/foil-js/otel');
 
 // Initialize Foil with OpenTelemetry - one line setup
 Foil.init({
@@ -81,7 +81,7 @@ const response = await openai.chat.completions.create({
 For more control over the OpenTelemetry configuration:
 
 ```javascript
-const { FoilSpanProcessor } = require('@foil/foil-js/otel');
+const { FoilSpanProcessor } = require('@getfoil/foil-js/otel');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { Resource } = require('@opentelemetry/resources');
 
@@ -111,7 +111,7 @@ provider.register();
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `apiKey` | string | Required | Your Foil API key |
-| `endpoint` | string | `https://api.foil.dev/api/otlp/v1/traces` | OTLP endpoint |
+| `endpoint` | string | `https://api.getfoil.ai/api/otlp/v1/traces` | OTLP endpoint |
 | `maxBatchSize` | number | 100 | Maximum spans per batch |
 | `scheduledDelayMs` | number | 5000 | Batch export interval in ms |
 | `exportTimeoutMs` | number | 30000 | Export request timeout in ms |
@@ -137,23 +137,23 @@ The following libraries are automatically instrumented:
 You can add attachments (images, code, text) to OTEL spans:
 
 ```javascript
-const { attachImage, attachCode, attachText, addAttachment } = require('@foil/foil-js/otel');
+const { attachImage, attachCode, attachText, addAttachment } = require('@getfoil/foil-js/otel');
 const { trace } = require('@opentelemetry/api');
 
 const tracer = trace.getTracer('my-app');
 
 tracer.startActiveSpan('process-image', async (span) => {
-  // Attach an image (base64)
-  attachImage(span, imageBase64Data, 'input');
+  // Attach an image — uses the active span automatically
+  attachImage(imageUrl, 'input');
 
   // Attach code
-  attachCode(span, 'console.log("hello")', 'javascript', 'output');
+  attachCode('console.log("hello")', 'output', 'javascript');
 
   // Attach text
-  attachText(span, 'Additional context here', 'input');
+  attachText('Additional context here', 'input');
 
-  // Generic attachment
-  addAttachment(span, 'text', 'Some text', 'input');
+  // Generic attachment (object form)
+  addAttachment({ type: 'text', value: 'Some text', role: 'input' });
 
   // ... your logic ...
 
@@ -165,11 +165,11 @@ tracer.startActiveSpan('process-image', async (span) => {
 
 | Type | Description | Helper Function |
 |------|-------------|-----------------|
-| `image` | Base64-encoded image data | `attachImage(span, base64, role)` |
-| `code` | Code snippet with language | `attachCode(span, code, language, role)` |
-| `text` | Plain text content | `attachText(span, text, role)` |
+| `image` | Image URL or base64 data | `attachImage(url, role, name?)` |
+| `code` | Code snippet with language | `attachCode(code, role, language?, name?)` |
+| `text` | Plain text content | `attachText(text, role, name?)` |
 
-The `role` parameter can be `'input'` or `'output'` to indicate the attachment's position in the span.
+Helpers get the active span via `@opentelemetry/api` automatically — you don't pass the span. The `role` parameter can be `'input'` or `'output'`.
 
 ## Custom Attributes
 
@@ -213,8 +213,8 @@ span.end();
 You can use OpenTelemetry auto-instrumentation alongside manual Foil tracing:
 
 ```javascript
-const { Foil } = require('@foil/foil-js/otel');
-const { createFoilTracer, SpanKind } = require('@foil/foil-js');
+const { Foil } = require('@getfoil/foil-js/otel');
+const { createFoilTracer, SpanKind } = require('@getfoil/foil-js');
 
 // Set up OTEL for auto-instrumentation
 Foil.init({ apiKey: API_KEY });
@@ -250,7 +250,7 @@ await tracer.trace(async (ctx) => {
 Always shut down gracefully to flush pending spans:
 
 ```javascript
-const { Foil } = require('@foil/foil-js/otel');
+const { Foil } = require('@getfoil/foil-js/otel');
 
 // Graceful shutdown handler
 process.on('SIGTERM', async () => {
@@ -297,6 +297,10 @@ Foil.init({
     - Check you're not also using manual `createFoilTracer` for the same calls
   </Accordion>
 </AccordionGroup>
+
+<Tip>
+  **Full examples**: [hello-foil](https://github.com/getfoil/foil-examples/tree/main/hello-foil) (OTEL quickstart) | [customer-support-agent/agent-otel.js](https://github.com/getfoil/foil-examples/blob/main/customer-support-agent/agent-otel.js) (OTEL with tool calling) | [multimodal-agent](https://github.com/getfoil/foil-examples/tree/main/multimodal-agent) (image attachments)
+</Tip>
 
 ## Next Steps
 

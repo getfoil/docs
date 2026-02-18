@@ -12,7 +12,7 @@ The Foil SDK integrates with the Vercel AI SDK to automatically trace streaming 
 The easiest way - just initialize Foil and your Vercel AI SDK calls are automatically traced:
 
 ```javascript
-const { Foil } = require('@foil/foil-js/otel');
+const { Foil } = require('@getfoil/foil-js/otel');
 const { openai } = require('@ai-sdk/openai');
 const { streamText } = require('ai');
 
@@ -41,7 +41,7 @@ For more control over tracing, use the callbacks:
 ```javascript
 const { openai } = require('@ai-sdk/openai');
 const { streamText } = require('ai');
-const { createFoilTracer, createVercelAICallbacks } = require('@foil/foil-js');
+const { createFoilTracer, createVercelAICallbacks } = require('@getfoil/foil-js');
 
 const tracer = createFoilTracer({
   apiKey: process.env.FOIL_API_KEY,
@@ -157,7 +157,7 @@ Integrate with Next.js API routes:
   <Tab title="OpenTelemetry (Recommended)">
     ```typescript
     // instrumentation.ts (Next.js instrumentation file)
-    import { Foil } from '@foil/foil-js/otel';
+    import { Foil } from '@getfoil/foil-js/otel';
 
     export function register() {
       Foil.init({
@@ -190,7 +190,7 @@ Integrate with Next.js API routes:
     // app/api/chat/route.ts
     import { openai } from '@ai-sdk/openai';
     import { streamText } from 'ai';
-    import { createFoilTracer, createVercelAICallbacks } from '@foil/foil-js';
+    import { createFoilTracer, createVercelAICallbacks } from '@getfoil/foil-js';
 
     const tracer = createFoilTracer({
       apiKey: process.env.FOIL_API_KEY!,
@@ -309,6 +309,9 @@ await tracer.trace(async (ctx) => {
 ## Next Steps
 
 <CardGroup cols={2}>
+  <Card title="OpenAI Agents SDK" icon="robot" href="/sdks/javascript/openai-agents">
+    Trace multi-agent workflows
+  </Card>
   <Card title="Signals & Feedback" icon="signal" href="/concepts/signals">
     Record user feedback
   </Card>

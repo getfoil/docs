@@ -29,7 +29,7 @@
                 "pages": [
                   "sdks/javascript/installation",
                   "sdks/javascript/quickstart",
-                  "sdks/javascript/opentelemetry",
+                  "sdks/javascript/auto-instrumentation",
                   "sdks/javascript/tracing"
                 ]
               },
@@ -38,8 +38,7 @@
                 "pages": [
                   "sdks/javascript/openai",
                   "sdks/javascript/openai-agents",
-                  "sdks/javascript/vercel-ai",
-                  "sdks/javascript/langchain"
+                  "sdks/javascript/vercel-ai"
                 ]
               },
               {
@@ -59,12 +58,14 @@
               "concepts/traces",
               "concepts/spans",
               "concepts/signals",
-              "concepts/agents"
+              "concepts/agents",
+              "concepts/agent-profiles"
             ]
           },
           {
             "group": "Features",
             "pages": [
+              "features/multimodal",
               "features/alerting",
               "features/analytics",
               "features/experiments"

@@ -5,7 +5,11 @@ description: Trace OpenAI Agents SDK workflows with the Foil JavaScript SDK
 
 # OpenAI Agents SDK
 
-The [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) (`@openai/agents`) is a framework for building multi-agent systems with Agents, Runner, handoffs, and guardrails in Node.js. Foil traces these agentic workflows using the manual tracer API — `createFoilTracer`, `ctx.startSpan`, and `span.end`.
+The [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) (`@openai/agents`) is a framework for building multi-agent systems with Agents, Runner, handoffs, and guardrails in Node.js. Foil traces these agentic workflows using the manual tracer API — `createFoilTracer`, `ctx.startSpan`, and `span.end` — which gives you full control over span hierarchy in agentic loops.
+
+<Tip>
+  For simpler function-calling use cases (no agentic loop), consider using `ctx.llmCall()` and `ctx.tool()` instead. See the [Manual Tracing](/sdks/javascript/tracing) page for the unified API.
+</Tip>
 
 <Note>
   Looking for basic OpenAI API tracing with `wrapOpenAI`? See the [OpenAI Integration](/sdks/javascript/openai) page instead.

@@ -16,11 +16,11 @@ Foil provides official SDKs for JavaScript and Python. Both SDKs offer core func
 | OpenAI Agents SDK | Yes | Yes |
 | Distributed Tracing | Yes | - |
 | Automatic Span Hierarchy | Yes | - |
-| LangChain Integration | Yes | - |
 | Vercel AI Integration | Yes | - |
 | Tool Call Tracking | Yes | Yes |
 | Signal Recording | Yes | - |
 | Streaming Support | Yes | Yes |
+| Multimodal / Media | Yes | Yes |
 
 <Tip>
   **Examples**: Browse complete, runnable examples for both SDKs at [github.com/getfoil/foil-examples](https://github.com/getfoil/foil-examples).
@@ -34,7 +34,7 @@ The JavaScript SDK is our most full-featured SDK, designed for complex AI applic
 - Node.js backend services
 - Next.js applications
 - Complex agent architectures
-- LangChain and Vercel AI integrations
+- Vercel AI integration
 
 ```bash
 npm install @getfoil/foil-js
@@ -46,35 +46,35 @@ npm install @getfoil/foil-js
 
 ### Key Features
 
-**FoilTracer** - High-level tracing API with automatic span management:
+**Foil** - High-level tracing API with automatic span management:
 
 ```javascript
-import { createFoilTracer, SpanKind } from '@getfoil/foil-js';
+import { Foil } from '@getfoil/foil-js';
 
-const tracer = createFoilTracer({
+const foil = new Foil({
   apiKey: 'your-api-key',
-  agentName: 'my-agent'
+  agentName: 'my-agent',
 });
 
-await tracer.trace(async (ctx) => {
-  // Automatic parent-child span relationships
+await foil.trace(async (ctx) => {
+  // LLM call with automatic span creation
+  const response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages,
+    });
+  });
+
+  // Tool calls nest under the trace automatically
   await ctx.tool('search', async () => {
     return await searchAPI(query);
   });
-
-  const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o');
-  // ... LLM call
-  await span.end({ output, tokens });
 });
 ```
 
 **Framework Integrations:**
 
 ```javascript
-// LangChain
-import { createLangChainCallback } from '@getfoil/foil-js';
-const callbacks = createLangChainCallback(tracer);
-
 // Vercel AI SDK
 import { createVercelAICallbacks } from '@getfoil/foil-js';
 const callbacks = createVercelAICallbacks(tracer);
@@ -149,10 +149,10 @@ By default, SDKs connect to the Foil cloud API. For self-hosted deployments:
 <Tabs>
   <Tab title="JavaScript">
     ```javascript
-    const tracer = createFoilTracer({
+    const foil = new Foil({
       apiKey: 'your-api-key',
       agentName: 'my-agent',
-      baseUrl: 'https://your-foil-instance.com/api'
+      baseUrl: 'https://your-foil-instance.com/api',
     });
     ```
   </Tab>
@@ -173,10 +173,10 @@ Enable debug logging to troubleshoot integration issues:
 <Tabs>
   <Tab title="JavaScript">
     ```javascript
-    const tracer = createFoilTracer({
+    const foil = new Foil({
       apiKey: 'your-api-key',
       agentName: 'my-agent',
-      debug: true  // or set FOIL_DEBUG=true
+      debug: true,  // or set FOIL_DEBUG=true
     });
     ```
   </Tab>

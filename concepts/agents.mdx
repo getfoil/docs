@@ -27,7 +27,7 @@ Each agent has its own:
 Agents are created automatically when you specify an `agentName`:
 
 ```javascript
-const tracer = createFoilTracer({
+const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName: 'customer-support'  // Creates agent if it doesn't exist
 });
@@ -103,19 +103,19 @@ Each agent tracks:
 
 ```javascript
 // Customer support agent
-const supportTracer = createFoilTracer({
+const supportFoil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName: 'customer-support'
 });
 
 // Code review agent
-const codeReviewTracer = createFoilTracer({
+const codeReviewFoil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName: 'code-review'
 });
 
 // Research agent
-const researchTracer = createFoilTracer({
+const researchFoil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName: 'research'
 });
@@ -126,7 +126,7 @@ const researchTracer = createFoilTracer({
 ```javascript
 const agentName = `customer-support-${process.env.NODE_ENV}`;
 
-const tracer = createFoilTracer({
+const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName  // e.g., 'customer-support-production'
 });
@@ -135,12 +135,12 @@ const tracer = createFoilTracer({
 ### Version Tracking
 
 ```javascript
-const tracer = createFoilTracer({
+const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName: 'customer-support'
 });
 
-await tracer.trace(async (ctx) => {
+await foil.trace(async (ctx) => {
   // ...
 }, {
   properties: {
@@ -148,27 +148,6 @@ await tracer.trace(async (ctx) => {
     promptVersion: 'v3'
   }
 });
-```
-
-## Agent Versioning
-
-Foil tracks agent versions automatically:
-
-```bash
-GET /api/agents/:agentId/versions
-
-[
-  {
-    "version": 3,
-    "createdAt": "2024-01-15T10:00:00Z",
-    "changes": { "alertSettings": {...} }
-  },
-  {
-    "version": 2,
-    "createdAt": "2024-01-10T10:00:00Z",
-    "changes": { "description": "Updated" }
-  }
-]
 ```
 
 ## Filtering by Agent
@@ -200,12 +179,12 @@ When agents collaborate, link them via traces:
 
 ```javascript
 // Orchestrator agent
-const orchestrator = createFoilTracer({
+const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName: 'orchestrator'
 });
 
-await orchestrator.trace(async (ctx) => {
+await foil.trace(async (ctx) => {
   // Delegate to research agent
   const researchSpan = await ctx.startSpan(SpanKind.AGENT, 'research-agent', {
     properties: { delegatedAgent: 'research' }
@@ -245,6 +224,9 @@ await orchestrator.trace(async (ctx) => {
 ## Next Steps
 
 <CardGroup cols={2}>
+  <Card title="Agent Profiles" icon="brain" href="/concepts/agent-profiles">
+    Behavioral baselines that improve evaluations
+  </Card>
   <Card title="Alerting" icon="bell" href="/features/alerting">
     Configure agent alerts
   </Card>

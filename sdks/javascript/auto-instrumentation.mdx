@@ -1,26 +1,30 @@
 ---
-title: OpenTelemetry Integration
-description: Zero-code auto-instrumentation for LLM calls with OpenTelemetry
+title: Auto-Instrumentation
+description: Zero-code auto-instrumentation for LLM calls
 ---
 
-# OpenTelemetry Integration
+# Auto-Instrumentation
 
-Foil supports [OpenTelemetry](https://opentelemetry.io/) for automatic instrumentation of your LLM calls. Combined with [OpenLLMetry](https://github.com/traceloop/openllmetry-js), you get zero-code tracing for OpenAI, Anthropic, LangChain, and more.
+Foil supports automatic instrumentation of LLM calls via [OpenLLMetry](https://github.com/traceloop/openllmetry-js). Pass `instrumentModules` to the `Foil` constructor and all calls to supported providers are traced automatically — no manual wrapping needed.
 
-## Why OpenTelemetry?
+<Note>
+  Auto-instrumentation is an **optional enhancement**. For most use cases, [`ctx.llmCall()`](/sdks/javascript/quickstart) is the recommended approach — it works with any LLM provider and gives you nested span trees (tools under LLM calls). Auto-instrumentation captures HTTP-level LLM calls only and does not create nested tool spans.
+</Note>
+
+## When to Use Auto-Instrumentation
 
 <CardGroup cols={2}>
   <Card title="Zero Code Changes" icon="wand-magic-sparkles">
-    Automatic instrumentation - just initialize and all LLM calls are traced
+    Automatic tracing — just pass `instrumentModules` and all LLM calls are captured
   </Card>
-  <Card title="Industry Standard" icon="globe">
-    OpenTelemetry is the industry standard for observability
+  <Card title="Supported Providers" icon="puzzle-piece">
+    Works with OpenAI, Anthropic, Azure, Cohere, Google AI, Bedrock, and more
   </Card>
-  <Card title="Wide Support" icon="puzzle-piece">
-    Works with OpenAI, Anthropic, Azure, Cohere, LangChain, LlamaIndex, and more
+  <Card title="Simple Pipelines" icon="arrow-right">
+    Great for straightforward LLM calls without complex tool nesting
   </Card>
-  <Card title="Combine with Manual" icon="layer-group">
-    Use alongside manual tracing for custom spans
+  <Card title="Quick Prototyping" icon="bolt">
+    Get tracing running instantly during development
   </Card>
 </CardGroup>
 
@@ -35,33 +39,69 @@ npm install @getfoil/foil-js
 ### Basic Setup
 
 ```javascript
-const { Foil } = require('@getfoil/foil-js/otel');
+const OpenAI = require('openai');
+const { Foil } = require('@getfoil/foil-js');
 
-// Initialize Foil with OpenTelemetry - one line setup
-Foil.init({
+// Pass instrumentModules to enable auto-instrumentation
+const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName: 'my-ai-agent',
+  instrumentModules: { openAI: OpenAI },
 });
 
-// Now all OpenAI/Anthropic/LangChain calls are automatically traced!
-const OpenAI = require('openai');
+// Now all OpenAI calls are automatically traced!
 const openai = new OpenAI();
 
 const response = await openai.chat.completions.create({
-  model: 'gpt-4',
+  model: 'gpt-4o',
   messages: [{ role: 'user', content: 'Hello!' }],
 });
 // ↑ This call is automatically traced to Foil
 ```
 
+### With foil.trace()
+
+Wrap auto-instrumented calls in `foil.trace()` to group them under a single trace:
+
+```javascript
+const OpenAI = require('openai');
+const { Foil } = require('@getfoil/foil-js');
+
+const foil = new Foil({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent',
+  instrumentModules: { openAI: OpenAI },
+});
+
+const openai = new OpenAI();
+
+await foil.trace(async (ctx) => {
+  // Both calls are automatically traced under the same trace
+  const plan = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: 'Plan a trip to Japan' }],
+  });
+
+  const details = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: 'Give me details on day 1' }],
+  });
+}, { name: 'trip-planner' });
+```
+
+<Warning>
+  **Don't combine `instrumentModules` with `ctx.llmCall()`** for the same provider. Using both creates duplicate spans — one from auto-instrumentation and one from `ctx.llmCall()`. Choose one approach per provider.
+</Warning>
+
 ## Configuration Options
 
-### Foil.init() Options
+### Foil Constructor Options (for auto-instrumentation)
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `apiKey` | string | Yes | Your Foil API key |
-| `agentName` | string | No | Agent name for grouping traces in Foil |
+| `agentName` | string | No | Agent name for grouping traces |
+| `instrumentModules` | object | Yes | Module map (e.g., `{ openAI: OpenAI }`) |
 | `endpoint` | string | No | Custom OTLP endpoint URL |
 | `debug` | boolean | No | Enable debug logging |
 
@@ -76,9 +116,23 @@ const response = await openai.chat.completions.create({
 
 ## Advanced Setup
 
+### Using the OTEL Module
+
+For advanced OpenTelemetry configuration, you can use the standalone OTEL module:
+
+```javascript
+const { Foil } = require('@getfoil/foil-js/otel');
+
+// Static init method for OTEL-only setup
+Foil.init({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-ai-agent',
+});
+```
+
 ### Manual FoilSpanProcessor
 
-For more control over the OpenTelemetry configuration:
+For full control over the OpenTelemetry pipeline:
 
 ```javascript
 const { FoilSpanProcessor } = require('@getfoil/foil-js/otel');
@@ -129,7 +183,6 @@ The following libraries are automatically instrumented:
 | **Cohere** | Chat, generate, embed |
 | **Google Generative AI** | Gemini models |
 | **AWS Bedrock** | Bedrock runtime |
-| **LangChain** | Chains, agents, retrievers, tools |
 | **LlamaIndex** | Queries, retrievers |
 
 ## Adding Attachments
@@ -208,59 +261,28 @@ span.end();
 | `foil.attachment.{n}.value` | Attachment content |
 | `foil.attachment.{n}.role` | `input` or `output` |
 
-## Combining with Manual Tracing
-
-You can use OpenTelemetry auto-instrumentation alongside manual Foil tracing:
-
-```javascript
-const { Foil } = require('@getfoil/foil-js/otel');
-const { createFoilTracer, SpanKind } = require('@getfoil/foil-js');
-
-// Set up OTEL for auto-instrumentation
-Foil.init({ apiKey: API_KEY });
-
-// Create a manual tracer for custom spans
-const tracer = createFoilTracer({
-  apiKey: API_KEY,
-  agentName: 'hybrid-agent',
-});
-
-await tracer.trace(async (ctx) => {
-  // Manual custom span
-  const span = await ctx.startSpan(SpanKind.CUSTOM, 'validate-input', {
-    input: { query: userQuery },
-  });
-
-  // Validation logic...
-
-  await span.end({ output: { valid: true } });
-
-  // Auto-instrumented OpenAI call
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [{ role: 'user', content: userQuery }],
-  });
-
-  return response;
-}, { name: 'hybrid-trace' });
-```
-
 ## Graceful Shutdown
 
 Always shut down gracefully to flush pending spans:
 
 ```javascript
-const { Foil } = require('@getfoil/foil-js/otel');
+const { Foil } = require('@getfoil/foil-js');
+
+const foil = new Foil({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent',
+  instrumentModules: { openAI: OpenAI },
+});
 
 // Graceful shutdown handler
 process.on('SIGTERM', async () => {
   console.log('Shutting down...');
-  await Foil.shutdown();
+  await foil.shutdown();
   process.exit(0);
 });
 
 // Or flush manually before exit
-await Foil.flush();
+await foil.flush();
 ```
 
 ## Troubleshooting
@@ -268,12 +290,10 @@ await Foil.flush();
 ### Enable Debug Logging
 
 ```javascript
-// Via environment variable
-process.env.FOIL_DEBUG = 'true';
-
-// Or via options
-Foil.init({
-  apiKey: API_KEY,
+const foil = new Foil({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent',
+  instrumentModules: { openAI: OpenAI },
   debug: true,
 });
 ```
@@ -283,38 +303,38 @@ Foil.init({
 <AccordionGroup>
   <Accordion title="Spans not appearing in Foil">
     - Check that your API key is correct
-    - Ensure `Foil.init()` is called before any LLM calls
-    - Call `await Foil.flush()` before process exit
+    - Ensure `Foil` is constructed with `instrumentModules` before any LLM calls
+    - Call `await foil.flush()` before process exit
     - Enable debug logging to see export status
   </Accordion>
   <Accordion title="Missing LLM details (tokens, model)">
-    - Ensure `Foil.init()` is called at the top of your app, before importing LLM libraries
+    - Ensure `new Foil({ instrumentModules })` is called at the top of your app, before importing LLM libraries
     - Check that the LLM library is supported
     - Some details require specific library versions
   </Accordion>
   <Accordion title="Duplicate spans">
-    - Don't initialize both `Foil.init()` and manual `FoilSpanProcessor`
-    - Check you're not also using manual `createFoilTracer` for the same calls
+    - Don't use `instrumentModules` and `ctx.llmCall()` for the same LLM calls
+    - Don't initialize both `Foil.init()` from `@getfoil/foil-js/otel` and `new Foil({ instrumentModules })`
   </Accordion>
 </AccordionGroup>
 
 <Tip>
-  **Full examples**: [hello-foil](https://github.com/getfoil/foil-examples/tree/main/hello-foil) (OTEL quickstart) | [customer-support-agent/agent-otel.js](https://github.com/getfoil/foil-examples/blob/main/customer-support-agent/agent-otel.js) (OTEL with tool calling) | [multimodal-agent](https://github.com/getfoil/foil-examples/tree/main/multimodal-agent) (image attachments)
+  **Full examples**: [hello-foil](https://github.com/getfoil/foil-examples/tree/main/hello-foil) (auto-instrumentation quickstart) | [customer-support-agent/agent-otel.js](https://github.com/getfoil/foil-examples/blob/main/customer-support-agent/agent-otel.js) (auto-instrumentation with tool calling) | [multimodal-agent](https://github.com/getfoil/foil-examples/tree/main/multimodal-agent) (image attachments)
 </Tip>
 
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Manual Tracing" icon="code" href="/sdks/javascript/tracing">
-    Learn about manual span creation
+  <Card title="JavaScript Quickstart" icon="js" href="/sdks/javascript/quickstart">
+    Learn `ctx.llmCall()` for nested span trees
+  </Card>
+  <Card title="Advanced Tracing" icon="code" href="/sdks/javascript/tracing">
+    Advanced tracing patterns
   </Card>
   <Card title="OpenAI Integration" icon="robot" href="/sdks/javascript/openai">
     OpenAI-specific features
   </Card>
   <Card title="Alerting" icon="bell" href="/features/alerting">
     Set up alerts for your traces
-  </Card>
-  <Card title="Analytics" icon="chart-line" href="/features/analytics">
-    Explore your trace analytics
   </Card>
 </CardGroup>

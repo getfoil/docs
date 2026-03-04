@@ -9,35 +9,132 @@ Learn the basics of tracing AI calls with the Foil JavaScript SDK.
 
 ## Basic Tracing
 
-The core concept is the **trace**. A trace represents a complete unit of work (like handling a user request) and contains one or more **spans** (individual operations).
+The core concept is the **trace**. A trace represents a complete unit of work (like handling a user request) and contains one or more **spans** (individual operations like LLM calls, tool executions, or retrieval steps).
 
 ```javascript
-import { createFoilTracer, SpanKind } from '@getfoil/foil-js';
+import { Foil } from '@getfoil/foil-js';
+import OpenAI from 'openai';
 
-const tracer = createFoilTracer({
+const openai = new OpenAI();
+const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
-  agentName: 'my-agent'
+  agentName: 'my-agent',
 });
 
 // Create a trace
-const result = await tracer.trace(async (ctx) => {
-  // ctx is the TraceContext - use it to create spans
-
-  const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
-    input: 'Hello, world!'
+const result = await foil.trace(async (ctx) => {
+  // LLM call — automatically creates and closes a span
+  const response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'Hello, world!' }],
+    });
   });
 
-  // Do your work here...
-  const output = 'Hi there!';
-
-  // End the span with results
-  await span.end({
-    output,
-    tokens: { prompt: 10, completion: 5, total: 15 }
-  });
-
-  return output;
+  return response.choices[0].message.content;
 }, { name: 'greeting' });
+```
+
+## Nested Spans
+
+The key benefit of `ctx.llmCall()` is that other spans automatically nest under it, giving you a clear tree in the dashboard:
+
+```
+Trace: agent-workflow
+├── llm (gpt-4o) — decides what tools to call
+│   ├── tool (web-search) — searches the web
+│   └── tool (calculator) — computes a result
+└── llm (gpt-4o) — synthesizes final answer
+```
+
+```javascript
+await foil.trace(async (ctx) => {
+  // First LLM call — plans the approach
+  const planResponse = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'Research and calculate the GDP of France' }],
+      tools: [/* tool definitions */],
+    });
+  });
+
+  // Tool calls — nest under the trace
+  const searchResults = await ctx.tool('web-search', async () => {
+    return await searchAPI('France GDP');
+  });
+
+  const calculation = await ctx.tool('calculator', async () => {
+    return compute(searchResults);
+  });
+
+  // Second LLM call — synthesizes results
+  const finalResponse = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'user', content: 'Research and calculate the GDP of France' },
+        { role: 'assistant', content: `Search results: ${searchResults}` },
+        { role: 'user', content: 'Now give me a final summary.' },
+      ],
+    });
+  });
+
+  return finalResponse.choices[0].message.content;
+}, { name: 'research-agent' });
+```
+
+## Convenience Methods
+
+The `TraceContext` provides shorthand methods for common span types. Each wraps your async function in a span and automatically records the return value as output:
+
+```javascript
+await foil.trace(async (ctx) => {
+  // LLM call
+  const response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({ model: 'gpt-4o', messages });
+  });
+
+  // Tool execution
+  const searchResults = await ctx.tool('web-search', async () => {
+    return await searchAPI(query);
+  }, { input: { query } });
+
+  // Retriever (RAG)
+  const docs = await ctx.retriever('vector-db', async () => {
+    return await vectorStore.search(query);
+  });
+
+  // Embedding generation
+  const embeddings = await ctx.embedding('text-embedding-3-small', async () => {
+    return await createEmbeddings(texts);
+  });
+});
+```
+
+## Signals and Feedback
+
+Record custom metrics and user feedback tied to your traces:
+
+```javascript
+await foil.trace(async (ctx) => {
+  const response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages,
+    });
+  });
+
+  // Record a custom signal
+  await ctx.recordSignal('response_length', response.choices[0].message.content.length);
+
+  // Record user feedback (thumbs up/down)
+  await ctx.recordFeedback(true); // true = positive
+
+  // Record a star rating
+  await ctx.recordRating(4.5);
+
+  return response.choices[0].message.content;
+}, { name: 'chat-with-feedback' });
 ```
 
 ## Span Types
@@ -56,111 +153,19 @@ SpanKind.EMBEDDING  // 'embedding' - Embedding generations
 SpanKind.CUSTOM     // 'custom' - Custom operations
 ```
 
-## Nested Spans
-
-Spans automatically nest based on when they're created:
-
-```javascript
-await tracer.trace(async (ctx) => {
-  // Parent span
-  const agentSpan = await ctx.startSpan(SpanKind.AGENT, 'process-query');
-
-  // Child span (automatically nested under agentSpan)
-  const llmSpan = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
-    input: messages
-  });
-
-  const response = await callLLM(messages);
-
-  await llmSpan.end({ output: response });
-  await agentSpan.end({ output: 'Done' });
-});
-```
-
-## Convenience Methods
-
-The `TraceContext` provides shorthand methods for common span types:
-
-```javascript
-await tracer.trace(async (ctx) => {
-  // Tool execution with automatic span management
-  const searchResults = await ctx.tool('web-search', async () => {
-    return await searchAPI(query);
-  }, { input: { query } });
-
-  // Retriever with automatic span
-  const docs = await ctx.retriever('vector-db', async () => {
-    return await vectorStore.search(query);
-  });
-
-  // Embedding with automatic span
-  const embeddings = await ctx.embedding('text-embedding-3-small', async () => {
-    return await createEmbeddings(texts);
-  });
-});
-```
-
-## Recording Tokens and Timing
-
-Always record token usage and timing when available:
-
-```javascript
-const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o');
-
-const startTime = Date.now();
-const response = await openai.chat.completions.create({
-  model: 'gpt-4o',
-  messages
-});
-
-await span.end({
-  output: response.choices[0].message.content,
-  tokens: {
-    prompt: response.usage.prompt_tokens,
-    completion: response.usage.completion_tokens,
-    total: response.usage.total_tokens
-  },
-  timing: {
-    totalDuration: Date.now() - startTime
-  }
-});
-```
-
 ## Error Handling
 
 Errors are automatically captured when spans fail:
 
 ```javascript
-await tracer.trace(async (ctx) => {
-  const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o');
-
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages
-    });
-    await span.end({ output: response.choices[0].message.content });
-  } catch (error) {
-    // Span automatically records error
-    await span.end({
-      error: error.message,
-      status: 'error'
-    });
-    throw error;
-  }
-});
-```
-
-Or use `wrapInSpan` for automatic error handling:
-
-```javascript
-await tracer.trace(async (ctx) => {
-  // Automatically captures errors and ends span
-  const result = await ctx.wrapInSpan(SpanKind.LLM, 'gpt-4o', async () => {
+await foil.trace(async (ctx) => {
+  // Errors are automatically recorded on the span and re-thrown
+  const response = await ctx.llmCall('gpt-4o', async () => {
     return await openai.chat.completions.create({
       model: 'gpt-4o',
-      messages
+      messages,
     });
+    // If this throws, the span records the error automatically
   });
 });
 ```
@@ -170,14 +175,50 @@ await tracer.trace(async (ctx) => {
 Add custom properties to spans for filtering and analysis:
 
 ```javascript
-const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
-  input: messages,
-  properties: {
-    userId: 'user-123',
-    sessionId: 'session-456',
-    feature: 'chat',
-    version: '2.0'
-  }
+await foil.trace(async (ctx) => {
+  const response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({ model: 'gpt-4o', messages });
+  }, {
+    input: messages,
+    properties: {
+      userId: 'user-123',
+      sessionId: 'session-456',
+      feature: 'chat',
+    },
+  });
+}, {
+  name: 'chat',
+  properties: { userId: 'user-123' },
+});
+```
+
+## Provider-Agnostic Usage
+
+`ctx.llmCall()` works with **any LLM provider** — not just OpenAI:
+
+```javascript
+await foil.trace(async (ctx) => {
+  // Anthropic
+  const claudeResponse = await ctx.llmCall('claude-sonnet-4-20250514', async () => {
+    return await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: 'Hello!' }],
+    });
+  });
+
+  // Local model via Ollama
+  const localResponse = await ctx.llmCall('llama3', async () => {
+    return await fetch('http://localhost:11434/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'llama3', messages }),
+    }).then(r => r.json());
+  });
+
+  // Any HTTP API
+  const customResponse = await ctx.llmCall('my-model', async () => {
+    return await myCustomLLMClient.generate(prompt);
+  });
 });
 ```
 
@@ -185,54 +226,58 @@ const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
 
 ```javascript
 import OpenAI from 'openai';
-import { createFoilTracer, SpanKind } from '@getfoil/foil-js';
+import { Foil } from '@getfoil/foil-js';
 
 const openai = new OpenAI();
-const tracer = createFoilTracer({
+const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
-  agentName: 'customer-support-agent'
+  agentName: 'customer-support-agent',
 });
 
 async function handleUserQuery(query, userId) {
-  return await tracer.trace(async (ctx) => {
+  return await foil.trace(async (ctx) => {
     // Step 1: Search knowledge base
     const docs = await ctx.retriever('knowledge-base', async () => {
       return await searchKnowledgeBase(query);
     }, { input: { query } });
 
     // Step 2: Generate response with context
-    const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
+    const response = await ctx.llmCall('gpt-4o', async () => {
+      return await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: `Context: ${docs.join('\n')}` },
+          { role: 'user', content: query },
+        ],
+      });
+    }, {
       input: { query, context: docs },
-      properties: { userId }
+      properties: { userId },
     });
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: `Context: ${docs.join('\n')}` },
-        { role: 'user', content: query }
-      ]
-    });
-
-    await span.end({
-      output: response.choices[0].message.content,
-      tokens: {
-        prompt: response.usage.prompt_tokens,
-        completion: response.usage.completion_tokens,
-        total: response.usage.total_tokens
-      }
-    });
+    // Step 3: Record a signal
+    await ctx.recordSignal('response_confidence', 0.95);
 
     return response.choices[0].message.content;
   }, {
     name: 'handle-query',
-    properties: { userId }
+    properties: { userId },
   });
 }
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  await foil.shutdown();
+  process.exit(0);
+});
 ```
 
+<Note>
+  **Advanced**: For lower-level control, you can still use `ctx.startSpan(SpanKind.LLM, 'model')` to manually create spans and call `span.end({ output, tokens })` yourself. See [Advanced Tracing](/sdks/javascript/tracing) for details.
+</Note>
+
 <Tip>
-  **Full examples**: [hello-foil](https://github.com/getfoil/foil-examples/tree/main/hello-foil) (OTEL auto-instrumentation) | [customer-support-agent](https://github.com/getfoil/foil-examples/tree/main/customer-support-agent) (native SDK with tools and feedback)
+  **Full examples**: [hello-foil](https://github.com/getfoil/foil-examples/tree/main/hello-foil) (auto-instrumentation) | [customer-support-agent](https://github.com/getfoil/foil-examples/tree/main/customer-support-agent) (SDK with tools and feedback)
 </Tip>
 
 ## Next Steps
@@ -242,6 +287,6 @@ async function handleUserQuery(query, userId) {
     Advanced tracing patterns
   </Card>
   <Card title="OpenAI Integration" icon="wand-magic-sparkles" href="/sdks/javascript/openai">
-    Automatic OpenAI instrumentation
+    OpenAI-specific features and `ctx.executeTools()`
   </Card>
 </CardGroup>

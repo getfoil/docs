@@ -45,14 +45,14 @@ Get your API key from the [Foil Dashboard](https://app.getfoil.ai) under **Setti
 FOIL_API_KEY=sk_live_xxx_yyy
 ```
 
-### Initialize the Tracer
+### Initialize Foil
 
 ```javascript
-import { createFoilTracer } from '@getfoil/foil-js';
+import { Foil } from '@getfoil/foil-js';
 
-const tracer = createFoilTracer({
+const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
-  agentName: 'my-agent'
+  agentName: 'my-agent',
 });
 ```
 
@@ -61,20 +61,21 @@ const tracer = createFoilTracer({
 | Option | Type | Required | Default | Description |
 |--------|------|----------|---------|-------------|
 | `apiKey` | string | Yes | - | Your Foil API key |
-| `agentName` | string | Yes | - | Unique identifier for your agent |
-| `baseUrl` | string | No | `https://api.getfoil.ai` | API endpoint URL |
+| `agentName` | string | No | `'default-agent'` | Unique identifier for your agent |
+| `baseUrl` | string | No | `https://api.getfoil.ai/api` | API endpoint URL |
 | `defaultModel` | string | No | - | Default model name for spans |
 | `debug` | boolean | No | `false` | Enable debug logging |
+| `instrumentModules` | object | No | - | Module map for [auto-instrumentation](/sdks/javascript/auto-instrumentation) (e.g., `{ openAI: OpenAI }`) |
 
 ### Debug Mode
 
 Enable debug mode to see detailed logs of all SDK operations:
 
 ```javascript
-const tracer = createFoilTracer({
+const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName: 'my-agent',
-  debug: true
+  debug: true,
 });
 ```
 
@@ -93,12 +94,21 @@ Debug output shows:
 ## Usage
 
 ```javascript
-const { createFoilTracer, SpanKind } = require('@getfoil/foil-js');
+const { Foil } = require('@getfoil/foil-js');
 
-const tracer = createFoilTracer({
+const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
-  agentName: 'my-agent'
+  agentName: 'my-agent',
 });
+
+await foil.trace(async (ctx) => {
+  const response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'Hello!' }],
+    });
+  });
+}, { name: 'my-trace' });
 ```
 
 ## Next Steps
@@ -108,6 +118,9 @@ const tracer = createFoilTracer({
     Write your first trace
   </Card>
   <Card title="OpenAI Integration" icon="wand-magic-sparkles" href="/sdks/javascript/openai">
-    Auto-instrument OpenAI calls
+    Trace OpenAI calls with nested tools
+  </Card>
+  <Card title="Auto-Instrumentation" icon="circle-nodes" href="/sdks/javascript/auto-instrumentation">
+    Zero-code tracing for supported providers
   </Card>
 </CardGroup>

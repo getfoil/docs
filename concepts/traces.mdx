@@ -44,15 +44,15 @@ Every trace has:
 <Tabs>
   <Tab title="JavaScript">
     ```javascript
-    import { createFoilTracer } from '@getfoil/foil-js';
+    import Foil from '@getfoil/foil-js';
 
-    const tracer = createFoilTracer({
+    const foil = new Foil({
       apiKey: process.env.FOIL_API_KEY,
       agentName: 'my-agent'
     });
 
     // Automatic trace creation
-    await tracer.trace(async (ctx) => {
+    await foil.trace(async (ctx) => {
       // ctx.traceId is automatically generated
       console.log('Trace ID:', ctx.traceId);
 
@@ -60,7 +60,7 @@ Every trace has:
     }, { name: 'process-request' });
 
     // Custom trace ID
-    await tracer.trace(async (ctx) => {
+    await foil.trace(async (ctx) => {
       // Your work here
     }, {
       name: 'custom-trace',

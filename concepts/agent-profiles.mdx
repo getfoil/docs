@@ -1,0 +1,155 @@
+---
+title: Agent Profiles
+description: Behavioral baselines that make AI evaluations smarter and more context-aware
+---
+
+# Agent Profiles
+
+Agent profiles are behavioral baselines that Foil automatically learns for each agent from its trace data. By understanding what's *normal* for a specific agent — its tools, error rates, traffic patterns, and usage characteristics — Foil can make evaluations like hallucination detection and quality analysis significantly more accurate.
+
+Without profiles, every agent is evaluated the same way. With profiles, evaluations are contextualized: the evaluator knows what the agent does, how it typically behaves, and what constitutes a deviation worth flagging.
+
+## What's in a Profile
+
+A profile captures multiple dimensions of agent behavior:
+
+| Component | What it Tracks |
+|-----------|---------------|
+| **Identity** | Use case, maturity level, behavioral summary |
+| **Tool patterns** | Tool distribution, common sequences, anomalous usage |
+| **Error patterns** | Error rate, common error types, trend direction |
+| **Temporal patterns** | Volume patterns, seasonality, peak usage times |
+| **Volume characteristics** | Daily averages, session length, typical latency |
+| **Insights** | AI-derived behavioral observations (3–5 key findings) |
+
+Insights are high-level observations that summarize the agent's behavior in plain language — for example, noting that an agent primarily handles customer questions during business hours with consistently low error rates.
+
+## How Profile Learning Works
+
+Profile learning is fully automatic. Once an agent starts sending traces, Foil begins collecting data and building a behavioral model through three phases.
+
+### Pre-profile
+
+Foil collects traces until enough data exists to build a meaningful profile. During this phase, no profile is available and evaluations run without behavioral context. Once a minimum data threshold is reached, learning begins.
+
+### Bootstrap
+
+Foil generates the first profile and continues refining it as more data arrives. During bootstrap:
+
+- The system re-learns at **geometrically increasing intervals** — learning is frequent early on and becomes less frequent as the profile stabilizes
+- Each learning cycle compares the new profile against the previous one
+- When the system detects **no material changes** across consecutive cycles, it considers the profile converged and transitions to steady state
+
+### Steady State
+
+The profile is established and stable. Re-learning only occurs when:
+
+- **Behavioral drift is detected** — new tools appear, error rates change significantly, volume patterns shift
+- **The profile becomes stale** — a periodic refresh ensures the profile stays current even without dramatic changes
+- A **cooldown period** prevents excessive re-learning from transient fluctuations
+
+In steady state, Foil also runs **per-trace anomaly detection** in real-time. Each incoming trace is compared against the learned profile to flag deviations — unusual tool usage, unexpected error patterns, or off-hours activity.
+
+## Anchors
+
+Anchors are health invariants that Foil automatically generates alongside a profile. They express concrete, measurable claims about the agent's behavior — for example:
+
+- "Error rate stays below 5%"
+- "Average latency remains under 2 seconds"
+- "Tool X is used in more than 80% of sessions"
+
+### How Anchors Work
+
+- Anchors are **generated automatically** when a profile is created or updated
+- They are **evaluated on every learning cycle**, with each anchor marked as `passing`, `failing`, or `unknown`
+- The current status and most recent measured value are stored with the profile
+
+### Anchor-Driven Re-learning
+
+When more than half of a profile's anchors break (transition to `failing`), Foil interprets this as a fundamental behavioral shift. The system re-enters the bootstrap phase to re-learn the profile from scratch, establishing new baselines that reflect the agent's changed behavior.
+
+## How Profiles Improve Evaluations
+
+Profiles are the key mechanism for making evaluations context-aware:
+
+**Without profiles**, evaluations apply the same generic criteria to every agent. A customer support bot and a code review assistant are judged identically, leading to false positives and missed issues.
+
+**With profiles**, evaluations are informed by the agent's known behavior:
+
+- **Contextual evaluation** — The evaluator receives relevant profile dimensions for each check. Hallucination detection gets tool patterns and identity context. Error detection gets error baselines. Quality checks get behavioral summaries.
+- **Anomaly flags** — Per-trace anomalies are surfaced to evaluators. If a trace uses a tool the agent has never used before, or shows an error rate far above baseline, this context helps the evaluator make a more informed judgment.
+- **Calibrated baselines** — An agent with a known 2% error rate is evaluated differently than one with a 15% error rate. What's normal for one agent might be alarming for another.
+
+The result: fewer false positives, more actionable alerts, and evaluations that understand the difference between expected behavior and genuine issues.
+
+## Managing Profiles
+
+### Viewing a Profile
+
+```bash
+GET /api/agents/:agentId/agent-profile
+```
+
+Returns the full profile including insights, anchor statuses, and whether learning is enabled.
+
+### Manual Editing
+
+```bash
+PUT /api/agents/:agentId/agent-profile
+```
+
+You can manually edit a profile to correct or supplement the learned data. Manual edits are preserved until the next learning cycle overwrites them.
+
+### Force Regeneration
+
+```bash
+POST /api/agents/:agentId/agent-profile/regenerate
+```
+
+Forces the profile to re-learn from scratch, starting from the bootstrap phase. Use this if the agent's purpose has fundamentally changed.
+
+### Reset Learning State
+
+```bash
+POST /api/agents/:agentId/agent-profile/reset-training
+```
+
+Resets the learning state entirely, clearing the existing profile and starting from pre-profile.
+
+### Enable/Disable Learning
+
+Profile learning is controlled via the agent's `profileSettings.learningEnabled` field. When disabled, the existing profile is preserved but no new learning occurs.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Let profiles bootstrap naturally">
+    Avoid forcing regeneration frequently. The learning system is designed to converge on its own — give it time to collect enough data and stabilize.
+  </Accordion>
+
+  <Accordion title="Use anchors as health monitors">
+    When anchors start failing, investigate the underlying cause. Anchor failures often indicate real behavioral changes — a new deployment, a prompt update, or a downstream service issue.
+  </Accordion>
+
+  <Accordion title="Manual edits are temporary">
+    If you manually edit a profile, be aware that the next learning cycle will overwrite your changes. Manual edits are best used for short-term corrections while you address the root cause.
+  </Accordion>
+
+  <Accordion title="Learning is automatic">
+    No configuration is needed beyond enabling profile learning. Foil handles data collection, threshold detection, and re-learning on its own.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Alerting" icon="bell" href="/features/alerting">
+    Configure alerts that benefit from profile context
+  </Card>
+  <Card title="Analytics" icon="chart-line" href="/features/analytics">
+    View agent performance metrics
+  </Card>
+  <Card title="Agents" icon="robot" href="/concepts/agents">
+    Set up and configure agents
+  </Card>
+</CardGroup>

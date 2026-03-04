@@ -112,7 +112,7 @@ Response:
 ## Using Variants in Your Code
 
 ```javascript
-const tracer = createFoilTracer({
+const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName: 'customer-support'
 });
@@ -121,7 +121,7 @@ async function handleQuery(query, userId) {
   // Get experiment assignment
   const assignment = await foil.getExperimentVariant('prompt-test-v2', userId);
 
-  return await tracer.trace(async (ctx) => {
+  return await foil.trace(async (ctx) => {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [

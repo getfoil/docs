@@ -5,11 +5,11 @@ description: Trace OpenAI Agents SDK workflows with the Foil Python SDK
 
 # OpenAI Agents SDK
 
-<Warning>
-  The Python SDK documentation is a work in progress. Content may be incomplete or subject to change.
-</Warning>
+The [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) (`openai-agents`) is a framework for building multi-agent systems with Agents, Runner, handoffs, and guardrails. Foil traces these agentic workflows using `Foil` with `foil.trace()` for the top-level trace, and `ctx.start_span` / `span.end` for fine-grained control within agent loops.
 
-The [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) (`openai-agents`) is a framework for building multi-agent systems with Agents, Runner, handoffs, and guardrails. Foil traces these agentic workflows using the manual tracer API — `create_foil_tracer`, `ctx.start_span`, and `span.end`.
+<Tip>
+  For simpler use cases, `Foil(agent_name=...)` with `foil.trace()` and `ctx.llm_call()` may be all you need. See the [Quickstart](/sdks/python/quickstart#using-traces).
+</Tip>
 
 <Note>
   Looking for basic OpenAI API tracing with `wrap_openai`? See the [OpenAI Integration](/sdks/python/openai) page instead.
@@ -28,10 +28,10 @@ Wrap your agent run in a Foil trace:
 ```python
 from openai import OpenAI
 from agents import Agent, Runner
-from foil import create_foil_tracer, SpanKind
+from foil import Foil, SpanKind
 import os
 
-tracer = create_foil_tracer(
+foil = Foil(
     api_key=os.environ['FOIL_API_KEY'],
     agent_name='my-agent',
 )
@@ -45,7 +45,7 @@ def run(ctx):
     result = Runner.run_sync(agent, 'What is the capital of France?')
     return result.final_output
 
-output = tracer.trace(run, name='agent-run', input='What is the capital of France?')
+output = foil.trace(run, name='agent-run', input='What is the capital of France?')
 print(output)
 ```
 
@@ -54,11 +54,11 @@ print(output)
 For full observability, create spans for each step in the agent loop. Use `SpanKind.AGENT` for the agent itself, `SpanKind.LLM` for completions, and `SpanKind.TOOL` for tool calls.
 
 ```python
-from foil import create_foil_tracer, SpanKind
+from foil import Foil, SpanKind
 from openai import OpenAI
 import json
 
-tracer = create_foil_tracer(
+foil = Foil(
     api_key=os.environ['FOIL_API_KEY'],
     agent_name='weather-agent',
 )
@@ -149,7 +149,7 @@ def agent_fn(ctx):
                     'content': json.dumps(result),
                 })
 
-tracer.trace(agent_fn, name='weather-lookup', input='What is the weather in Paris?')
+foil.trace(agent_fn, name='weather-lookup', input='What is the weather in Paris?')
 ```
 
 Creates a trace like:
@@ -168,7 +168,7 @@ For simpler cases, use `ctx.tool()` as a convenience wrapper. It automatically c
 ```python
 def agent_fn(ctx):
     # Using the convenience method
-    weather = ctx.tool('get_weather', lambda: get_weather('Paris'))
+    weather = ctx.tool('get_weather', lambda _: get_weather('Paris'))
 
     # Equivalent to:
     tool_span = ctx.start_span(SpanKind.TOOL, 'get_weather', {'input': 'Paris'})
@@ -215,7 +215,7 @@ def agent_fn(ctx):
 
     coordinator_span.end({'output': 'Trip plan complete'})
 
-tracer.trace(agent_fn, name='trip-planner', input='Plan a trip to Tokyo')
+foil.trace(agent_fn, name='trip-planner', input='Plan a trip to Tokyo')
 ```
 
 Creates a trace like:
@@ -313,11 +313,11 @@ A full working agent with tool calls, multiple iterations, and comprehensive tra
 import os
 import json
 from openai import OpenAI
-from foil import create_foil_tracer, SpanKind
+from foil import Foil, SpanKind
 
 openai_client = OpenAI()
 
-tracer = create_foil_tracer(
+foil = Foil(
     api_key=os.environ['FOIL_API_KEY'],
     agent_name='openai-agent',
 )
@@ -435,7 +435,7 @@ def agent_fn(ctx):
     return 'Max iterations reached'
 
 
-result = tracer.trace(
+result = foil.trace(
     agent_fn,
     name='agent-conversation',
     input='What is the weather in SF? Also, what is 15 * 7 + 23?',
@@ -449,7 +449,7 @@ print(result)
 
 | Agents SDK Concept | Foil Span Type | Description |
 |--------------------|----------------|-------------|
-| Agent run | `tracer.trace()` | Top-level trace for the full agent execution |
+| Agent run | `foil.trace()` | Top-level trace for the full agent execution |
 | LLM completion | `SpanKind.LLM` | Each call to the model, with tokens and latency |
 | Tool call | `SpanKind.TOOL` | Individual tool executions with input/output |
 | Agent handoff | `SpanKind.AGENT` | Delegated agent as a nested span via `create_child_context()` |

@@ -5,10 +5,6 @@ description: Install the Foil Python SDK
 
 # Installation
 
-<Warning>
-  The Python SDK documentation is a work in progress. Content may be incomplete or subject to change.
-</Warning>
-
 The Foil Python SDK provides automatic OpenAI instrumentation and logging for Python applications.
 
 ## Requirements
@@ -57,18 +53,8 @@ foil = Foil(api_key=os.environ['FOIL_API_KEY'])
 | Option | Type | Required | Default | Description |
 |--------|------|----------|---------|-------------|
 | `api_key` | str | Yes | - | Your Foil API key |
-| `base_url` | str | No | `https://api.getfoil.ai/api` | API endpoint URL |
-
-### Custom Base URL
-
-For self-hosted deployments:
-
-```python
-foil = Foil(
-    api_key=os.environ['FOIL_API_KEY'],
-    base_url='https://your-foil-instance.com/api'
-)
-```
+| `agent_name` | str | No | - | Agent name (required for tracing) |
+| `debug` | bool | No | `False` | Enable debug logging |
 
 ## Verify Installation
 

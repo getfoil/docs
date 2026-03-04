@@ -14,11 +14,11 @@ Foil provides official SDKs for JavaScript and Python. Both SDKs offer core func
 | Basic Logging | Yes | Yes |
 | OpenAI Wrapper | Yes | Yes |
 | OpenAI Agents SDK | Yes | Yes |
-| Distributed Tracing | Yes | - |
-| Automatic Span Hierarchy | Yes | - |
+| Distributed Tracing | Yes | Yes |
+| Automatic Span Hierarchy | Yes | Yes |
 | Vercel AI Integration | Yes | - |
 | Tool Call Tracking | Yes | Yes |
-| Signal Recording | Yes | - |
+| Signal Recording | Yes | Yes |
 | Streaming Support | Yes | Yes |
 | Multimodal / Media | Yes | Yes |
 
@@ -82,13 +82,13 @@ const callbacks = createVercelAICallbacks(tracer);
 
 ## Python SDK
 
-The Python SDK provides a lightweight interface for logging in Python applications, with automatic OpenAI instrumentation.
+The Python SDK provides tracing, logging, and feedback collection for Python applications, with automatic OpenAI instrumentation.
 
 **Best for:**
 - Python backend services
 - FastAPI/Flask applications
 - Jupyter notebooks
-- Simple LLM integrations
+- LLM integrations
 
 ```bash
 pip install foil-sdk
@@ -100,6 +100,28 @@ pip install foil-sdk
 
 ### Key Features
 
+**Foil** - High-level tracing API with automatic span management:
+
+```python
+from foil import Foil
+
+foil = Foil(
+    api_key='your-api-key',
+    agent_name='my-agent',
+)
+
+def my_workflow(ctx):
+    result = ctx.llm_call('gpt-4o', lambda _: openai.chat.completions.create(
+        model='gpt-4o',
+        messages=[{'role': 'user', 'content': 'Hello!'}],
+    ))
+
+    data = ctx.tool('search', lambda _: search_api(query))
+    return result.choices[0].message.content
+
+foil.trace(my_workflow, name='my-trace')
+```
+
 **OpenAI Wrapper** - Automatic tracing for all OpenAI calls:
 
 ```python
@@ -109,24 +131,11 @@ from foil import Foil
 client = OpenAI()
 foil = Foil(api_key='your-api-key')
 
-# Automatic tracing for all calls
 wrapped = foil.wrap_openai(client)
 response = wrapped.chat.completions.create(
     model='gpt-4o',
     messages=[{'role': 'user', 'content': 'Hello!'}]
 )
-```
-
-**Fire-and-Forget Logging:**
-
-```python
-foil.log({
-    'model': 'gpt-4o',
-    'input': messages,
-    'output': response,
-    'latency': 1200,
-    'tokens': {'prompt': 100, 'completion': 50}
-})
 ```
 
 ## Authentication
@@ -141,30 +150,6 @@ export FOIL_API_KEY=sk_live_xxx_yyy
 <Warning>
   Never commit API keys to version control. Use environment variables or a secrets manager.
 </Warning>
-
-## Base URL Configuration
-
-By default, SDKs connect to the Foil cloud API. For self-hosted deployments:
-
-<Tabs>
-  <Tab title="JavaScript">
-    ```javascript
-    const foil = new Foil({
-      apiKey: 'your-api-key',
-      agentName: 'my-agent',
-      baseUrl: 'https://your-foil-instance.com/api',
-    });
-    ```
-  </Tab>
-  <Tab title="Python">
-    ```python
-    foil = Foil(
-        api_key='your-api-key',
-        base_url='https://your-foil-instance.com/api'
-    )
-    ```
-  </Tab>
-</Tabs>
 
 ## Debug Mode
 
@@ -182,8 +167,11 @@ Enable debug logging to troubleshoot integration issues:
   </Tab>
   <Tab title="Python">
     ```python
-    import logging
-    logging.basicConfig(level=logging.DEBUG)
+    foil = Foil(
+        api_key='your-api-key',
+        agent_name='my-agent',
+        debug=True,  # or set FOIL_DEBUG=true
+    )
     ```
   </Tab>
 </Tabs>

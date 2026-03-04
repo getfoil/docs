@@ -49,10 +49,12 @@ FOIL_API_KEY=sk_live_xxx_yyy
 
 ```javascript
 import { Foil } from '@getfoil/foil-js';
+import OpenAI from 'openai';
 
 const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName: 'my-agent',
+  instrumentModules: { openAI: OpenAI },
 });
 ```
 
@@ -62,10 +64,9 @@ const foil = new Foil({
 |--------|------|----------|---------|-------------|
 | `apiKey` | string | Yes | - | Your Foil API key |
 | `agentName` | string | No | `'default-agent'` | Unique identifier for your agent |
-| `baseUrl` | string | No | `https://api.getfoil.ai/api` | API endpoint URL |
+| `instrumentModules` | object | No | - | Module map for [auto-instrumentation](/sdks/javascript/auto-instrumentation) (e.g., `{ openAI: OpenAI }`) |
 | `defaultModel` | string | No | - | Default model name for spans |
 | `debug` | boolean | No | `false` | Enable debug logging |
-| `instrumentModules` | object | No | - | Module map for [auto-instrumentation](/sdks/javascript/auto-instrumentation) (e.g., `{ openAI: OpenAI }`) |
 
 ### Debug Mode
 
@@ -93,23 +94,57 @@ Debug output shows:
 
 ## Usage
 
+With auto-instrumentation enabled, your LLM calls are traced automatically — no wrapping needed:
+
 ```javascript
-const { Foil } = require('@getfoil/foil-js');
+import { Foil } from '@getfoil/foil-js';
+import OpenAI from 'openai';
 
 const foil = new Foil({
   apiKey: process.env.FOIL_API_KEY,
   agentName: 'my-agent',
+  instrumentModules: { openAI: OpenAI },
 });
 
+const openai = new OpenAI();
+
 await foil.trace(async (ctx) => {
-  const response = await ctx.llmCall('gpt-4o', async () => {
-    return await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: 'Hello!' }],
-    });
+  // All OpenAI calls are automatically traced — no wrapping needed
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: 'Hello!' }],
   });
+
+  return response.choices[0].message.content;
 }, { name: 'my-trace' });
+
+await foil.shutdown();
 ```
+
+### Supported Providers
+
+| Provider | Module Key |
+|----------|-----------|
+| OpenAI | `openAI: OpenAI` |
+| Anthropic | `anthropic: Anthropic` |
+| Azure OpenAI | `azureOpenAI: AzureOpenAI` |
+| Cohere | `cohere: Cohere` |
+| Google Generative AI | `google: GoogleGenerativeAI` |
+| AWS Bedrock | `bedrock: Bedrock` |
+
+<Note>
+  **Using a custom or unsupported model?** Use `ctx.llmCall()` to manually wrap any LLM call in a span. This works with any provider — self-hosted models, local Ollama, or any HTTP API.
+
+  ```javascript
+  await foil.trace(async (ctx) => {
+    const response = await ctx.llmCall('my-model', async () => {
+      return await myCustomLLM.generate({ prompt: 'Hello!' });
+    });
+  }, { name: 'my-trace' });
+  ```
+
+  See the [Quickstart](/sdks/javascript/quickstart) for more details.
+</Note>
 
 ## Next Steps
 

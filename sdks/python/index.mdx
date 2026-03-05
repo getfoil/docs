@@ -1,0 +1,382 @@
+---
+title: Python SDK
+description: Complete guide to the Foil Python SDK
+---
+
+# Python SDK
+
+The Foil Python SDK provides automatic OpenAI instrumentation, tracing, logging, and feedback collection for Python applications.
+
+<Tip>
+  **Full examples**: Browse runnable examples at [github.com/getfoil/foil-examples](https://github.com/getfoil/foil-examples).
+</Tip>
+
+## Installation
+
+**Requirements:** Python 3.8 or higher
+
+```bash
+pip install foil-sdk
+```
+
+Or with poetry:
+
+```bash
+poetry add foil-sdk
+```
+
+### Configuration
+
+Get your API key from the [Foil Dashboard](https://app.getfoil.ai) under **Settings > API Keys**.
+
+<Warning>
+  Never hardcode API keys in your source code. Use environment variables instead.
+</Warning>
+
+```bash
+# .env or shell
+export FOIL_API_KEY=sk_live_xxx_yyy
+```
+
+```python
+import os
+from foil import Foil
+
+foil = Foil(api_key=os.environ['FOIL_API_KEY'])
+```
+
+### Configuration Options
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `api_key` | str | Yes | - | Your Foil API key |
+| `agent_name` | str | No | - | Agent name (required for tracing) |
+| `debug` | bool | No | `False` | Enable debug logging |
+
+## Quick Start: OpenAI Wrapper
+
+The easiest way to get started is with the OpenAI wrapper, which automatically traces all your API calls:
+
+```python
+from openai import OpenAI
+from foil import Foil
+import os
+
+# Initialize clients
+client = OpenAI()
+foil = Foil(api_key=os.environ['FOIL_API_KEY'])
+
+# Wrap the OpenAI client
+wrapped_client = foil.wrap_openai(client)
+
+# All calls are now automatically traced
+response = wrapped_client.chat.completions.create(
+    model='gpt-4o',
+    messages=[{'role': 'user', 'content': 'Hello!'}]
+)
+
+print(response.choices[0].message.content)
+```
+
+Every call through `wrapped_client` is automatically logged to Foil with model name, input messages, output response, token usage, latency, and errors (if any).
+
+### Streaming
+
+Streaming responses work seamlessly:
+
+```python
+wrapped_client = foil.wrap_openai(client)
+
+stream = wrapped_client.chat.completions.create(
+    model='gpt-4o',
+    messages=[{'role': 'user', 'content': 'Write a haiku'}],
+    stream=True
+)
+
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end='', flush=True)
+
+# TTFT and full content are automatically captured
+```
+
+### Tool Calls
+
+Function/tool calls are automatically tracked:
+
+```python
+tools = [
+    {
+        'type': 'function',
+        'function': {
+            'name': 'get_weather',
+            'description': 'Get weather for a location',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'location': {'type': 'string'}
+                },
+                'required': ['location']
+            }
+        }
+    }
+]
+
+wrapped_client = foil.wrap_openai(client)
+
+response = wrapped_client.chat.completions.create(
+    model='gpt-4o',
+    messages=[{'role': 'user', 'content': 'What is the weather in Paris?'}],
+    tools=tools
+)
+
+# Tool calls are captured in the trace
+if response.choices[0].message.tool_calls:
+    for tool_call in response.choices[0].message.tool_calls:
+        print(f'Tool: {tool_call.function.name}')
+        print(f'Args: {tool_call.function.arguments}')
+```
+
+## Using Traces
+
+For structured tracing with full span hierarchy, use `Foil` with `agent_name` and the `trace()` method:
+
+```python
+from foil import Foil
+import os
+
+foil = Foil(
+    api_key=os.environ['FOIL_API_KEY'],
+    agent_name='my-agent',
+)
+
+def my_workflow(ctx):
+    # LLM call with automatic span creation
+    result = ctx.llm_call('gpt-4o', lambda _: openai.chat.completions.create(
+        model='gpt-4o',
+        messages=[{'role': 'user', 'content': 'Hello!'}],
+    ))
+
+    # Tool calls nest under the trace automatically
+    data = ctx.tool('search', lambda _: search_api(query))
+
+    return result.choices[0].message.content
+
+output = foil.trace(my_workflow, name='my-trace', input='Hello!')
+print(output)
+```
+
+This creates a trace with nested spans:
+
+```
+Trace: my-agent
+├── LLM: gpt-4o
+└── TOOL: search
+```
+
+### Available Span Methods
+
+| Method | Description |
+|--------|-------------|
+| `ctx.llm_call(model, fn)` | Wrap an LLM call in a span |
+| `ctx.tool(name, fn)` | Wrap a tool execution in a span |
+| `ctx.retriever(name, fn)` | Wrap a retriever operation |
+| `ctx.embedding(model, fn)` | Wrap an embedding operation |
+| `ctx.start_span(kind, name)` | Manual span for full control |
+| `ctx.record_feedback(positive)` | Record thumbs up/down |
+| `ctx.record_signal(name, value)` | Record a custom signal |
+
+## Fire-and-Forget Logging
+
+For manual logging without the OpenAI wrapper:
+
+```python
+foil.log({
+    'model': 'gpt-4o',
+    'input': messages,
+    'output': response,
+    'latency': 1200,
+    'tokens': {
+        'prompt': 100,
+        'completion': 50,
+        'total': 150
+    },
+    'status': 'completed'
+})
+```
+
+This is non-blocking and doesn't wait for a response.
+
+## Complete Example
+
+```python
+from openai import OpenAI
+from foil import Foil
+import os
+
+def main():
+    # Initialize clients
+    client = OpenAI()
+    foil = Foil(api_key=os.environ['FOIL_API_KEY'])
+
+    # Wrap OpenAI client
+    wrapped_client = foil.wrap_openai(client)
+
+    # Chat application
+    messages = [
+        {'role': 'system', 'content': 'You are a helpful assistant.'}
+    ]
+
+    print('Chat with GPT-4o (type "quit" to exit)')
+
+    while True:
+        user_input = input('You: ')
+        if user_input.lower() == 'quit':
+            break
+
+        messages.append({'role': 'user', 'content': user_input})
+
+        # Automatically traced
+        response = wrapped_client.chat.completions.create(
+            model='gpt-4o',
+            messages=messages,
+            stream=True
+        )
+
+        print('Assistant: ', end='')
+        full_response = ''
+        for chunk in response:
+            if chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
+                print(content, end='', flush=True)
+                full_response += content
+        print()
+
+        messages.append({'role': 'assistant', 'content': full_response})
+
+if __name__ == '__main__':
+    main()
+```
+
+## Error Handling
+
+Errors are automatically captured:
+
+```python
+wrapped_client = foil.wrap_openai(client)
+
+try:
+    response = wrapped_client.chat.completions.create(
+        model='gpt-4o',
+        messages=[{'role': 'user', 'content': 'Hello'}]
+    )
+except Exception as e:
+    # Error is already recorded in Foil
+    print(f'Error: {e}')
+    raise
+```
+
+## Advanced Patterns
+
+<AccordionGroup>
+  <Accordion title="AsyncOpenAI support">
+    The wrapper works with the async OpenAI client:
+
+    ```python
+    from openai import AsyncOpenAI
+    from foil import Foil
+    import asyncio
+
+    async def main():
+        client = AsyncOpenAI()
+        foil = Foil(api_key=os.environ['FOIL_API_KEY'])
+
+        wrapped_client = foil.wrap_openai(client)
+
+        response = await wrapped_client.chat.completions.create(
+            model='gpt-4o',
+            messages=[{'role': 'user', 'content': 'Hello!'}]
+        )
+
+        print(response.choices[0].message.content)
+
+    asyncio.run(main())
+    ```
+  </Accordion>
+
+  <Accordion title="Multi-turn conversations">
+    Each call through the wrapped client is logged separately:
+
+    ```python
+    wrapped_client = foil.wrap_openai(client)
+    messages = []
+
+    messages.append({'role': 'user', 'content': 'My name is Alice'})
+    response = wrapped_client.chat.completions.create(
+        model='gpt-4o',
+        messages=messages
+    )
+    messages.append({'role': 'assistant', 'content': response.choices[0].message.content})
+
+    messages.append({'role': 'user', 'content': 'What is my name?'})
+    response = wrapped_client.chat.completions.create(
+        model='gpt-4o',
+        messages=messages
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Multi-agent handoffs with create_child_context">
+    When one agent delegates to another, use `span.create_child_context()` to create nested agent spans:
+
+    ```python
+    def agent_fn(ctx):
+        coordinator_span = ctx.start_span(
+            SpanKind.AGENT, 'coordinator',
+            {'input': 'Plan a trip to Tokyo'},
+        )
+
+        child_ctx = coordinator_span.create_child_context()
+
+        flight_span = child_ctx.start_span(
+            SpanKind.AGENT, 'flight-searcher',
+            {'input': 'Find flights to Tokyo'},
+        )
+        # ... sub-agent work ...
+        flight_span.end({'output': 'Flight options compiled'})
+
+        hotel_span = child_ctx.start_span(
+            SpanKind.AGENT, 'hotel-searcher',
+            {'input': 'Find hotels in Tokyo'},
+        )
+        # ... sub-agent work ...
+        hotel_span.end({'output': 'Hotel options compiled'})
+
+        coordinator_span.end({'output': 'Trip plan complete'})
+
+    foil.trace(agent_fn, name='trip-planner')
+    ```
+  </Accordion>
+
+  <Accordion title="Guardrails tracing">
+    Trace input and output guardrail checks as separate spans:
+
+    ```python
+    def agent_fn(ctx):
+        guard_span = ctx.start_span(
+            SpanKind.CHAIN, 'input-guardrail',
+            {'input': user_input},
+        )
+        is_safe = check_input_guardrail(user_input)
+        guard_span.end({
+            'output': {'safe': is_safe},
+            'properties': {'guardrail_type': 'input'},
+        })
+
+        if not is_safe:
+            return 'Request blocked by guardrail'
+
+        # Continue with LLM call...
+    ```
+  </Accordion>
+</AccordionGroup>

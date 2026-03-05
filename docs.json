@@ -27,27 +27,19 @@
               {
                 "group": "JavaScript",
                 "pages": [
-                  "sdks/javascript/installation",
-                  "sdks/javascript/quickstart",
-                  "sdks/javascript/auto-instrumentation",
-                  "sdks/javascript/tracing"
+                  "sdks/javascript/index"
                 ]
               },
               {
                 "group": "Integrations",
                 "pages": [
-                  "sdks/javascript/openai",
-                  "sdks/javascript/openai-agents",
                   "sdks/javascript/vercel-ai"
                 ]
               },
               {
                 "group": "Python",
                 "pages": [
-                  "sdks/python/installation",
-                  "sdks/python/quickstart",
-                  "sdks/python/openai",
-                  "sdks/python/openai-agents"
+                  "sdks/python/index"
                 ]
               }
             ]
@@ -55,8 +47,7 @@
           {
             "group": "Concepts",
             "pages": [
-              "concepts/traces",
-              "concepts/spans",
+              "concepts/traces-and-spans",
               "concepts/signals",
               "concepts/agents",
               "concepts/agent-profiles"

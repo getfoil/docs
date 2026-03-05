@@ -26,11 +26,6 @@ Your App → SDK uploadMedia() → Foil API → S3 (original file)
                           └──────────┬──────────┘
                                      ↓
                           ┌─────────────────────┐
-                          │  S3 (extracted text  │
-                          │  + structured data)  │
-                          └──────────┬──────────┘
-                                     ↓
-                          ┌─────────────────────┐
                           │  Evaluations use     │
                           │  extracted content   │
                           └─────────────────────┘
@@ -61,30 +56,15 @@ Your App → SDK uploadMedia() → Foil API → S3 (original file)
 
 ## Content Blocks
 
-Content blocks let you mix text and media references in span inputs and outputs. There are two types:
+Content blocks let you mix text and media references in span inputs and outputs:
 
 - **Text blocks** — plain text content (`{ type: 'text', text: '...' }`)
 - **Media blocks** — references to uploaded media (`{ type: 'media', mediaId: '...' }`)
 
-### Creating Content Blocks
-
 <Tabs>
   <Tab title="JavaScript">
     ```javascript
-    import { ContentBlock, content } from '@getfoil/foil-js';
-
-    // Text block
-    const textBlock = ContentBlock.text('Analyze this document:');
-
-    // Media block (for already-uploaded media)
-    const mediaBlock = ContentBlock.media('media-abc-123', {
-      category: 'document',
-      mimeType: 'application/pdf',
-      filename: 'report.pdf'
-    });
-
-    // File block (auto-uploads when span is sent)
-    const fileBlock = ContentBlock.file('/path/to/report.pdf');
+    const { ContentBlock, content } = require('@getfoil/foil-js');
 
     // Mix text and media with the content() helper
     const blocks = content(
@@ -103,17 +83,6 @@ Content blocks let you mix text and media references in span inputs and outputs.
     ```python
     from foil import ContentBlock, content
 
-    # Text block
-    text_block = ContentBlock.text("Analyze this document:")
-
-    # Media block (for already-uploaded media)
-    media_block = ContentBlock.media("media-abc-123",
-        category="document",
-        mime_type="application/pdf",
-        filename="report.pdf"
-    )
-
-    # Mix text and media with the content() helper
     blocks = content(
         "Analyze this document:",
         ContentBlock.media("media-abc-123"),
@@ -128,7 +97,7 @@ Content blocks let you mix text and media references in span inputs and outputs.
 The JavaScript SDK supports `ContentBlock.file()` which automatically uploads files before the span is sent — no manual `uploadMedia()` call needed:
 
 ```javascript
-import { ContentBlock, content } from '@getfoil/foil-js';
+const { ContentBlock, content } = require('@getfoil/foil-js');
 
 const blocks = content(
   'Process this CSV:',
@@ -145,13 +114,8 @@ const span = await ctx.startSpan(SpanKind.LLM, 'gpt-4o', {
 `ContentBlock.file()` accepts a file path, `Buffer`, or `ReadStream`:
 
 ```javascript
-// File path
 ContentBlock.file('/path/to/file.pdf')
-
-// Buffer (filename required)
 ContentBlock.file(Buffer.from(data), { filename: 'data.csv' })
-
-// ReadStream
 ContentBlock.file(fs.createReadStream('/path/to/file.png'))
 ```
 
@@ -162,7 +126,7 @@ Upload files directly with `uploadMedia()` for more control over the upload life
 <Tabs>
   <Tab title="JavaScript">
     ```javascript
-    import Foil from '@getfoil/foil-js';
+    const { Foil } = require('@getfoil/foil-js');
 
     const foil = new Foil({ apiKey: 'sk_live_...' });
 
@@ -174,10 +138,6 @@ Upload files directly with `uploadMedia()` for more control over the upload life
       filename: 'sales-data.csv',
       mimeType: 'text/csv'
     });
-
-    // Upload from ReadStream
-    const stream = fs.createReadStream('/path/to/image.png');
-    const result = await foil.uploadMedia(stream);
 
     // Associate with a span at upload time
     const result = await foil.uploadMedia('/path/to/file.pdf', {
@@ -199,10 +159,6 @@ Upload files directly with `uploadMedia()` for more control over the upload life
     # Upload from bytes
     result = foil.upload_media(csv_bytes, filename="sales-data.csv", mime_type="text/csv")
 
-    # Upload from file-like object
-    with open("/path/to/image.png", "rb") as f:
-        result = foil.upload_media(f)
-
     # Associate with a span at upload time
     result = foil.upload_media("/path/to/file.pdf",
         span_id="span-123",
@@ -223,16 +179,6 @@ Upload files directly with `uploadMedia()` for more control over the upload life
 | `traceId` / `trace_id` | string | Associate media with a trace |
 | `direction` | string | `'input'` or `'output'` |
 
-### Upload Response
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `mediaId` | string | Unique media identifier |
-| `category` | string | Auto-detected category (document, image, etc.) |
-| `filename` | string | Stored filename |
-| `mimeType` | string | Detected MIME type |
-| `processing` | object | Processing status (`{ status: 'queued' }`) |
-
 ## Using Media in Spans
 
 After uploading, reference media in span inputs and outputs using content blocks.
@@ -240,7 +186,7 @@ After uploading, reference media in span inputs and outputs using content blocks
 <Tabs>
   <Tab title="JavaScript">
     ```javascript
-    import Foil, { ContentBlock, content } from '@getfoil/foil-js';
+    const { Foil, ContentBlock, content } = require('@getfoil/foil-js');
 
     const foil = new Foil({
       apiKey: 'sk_live_...',
@@ -248,10 +194,8 @@ After uploading, reference media in span inputs and outputs using content blocks
     });
 
     await foil.trace(async (ctx) => {
-      // Upload the file
       const upload = await foil.uploadMedia('/path/to/report.pdf');
 
-      // LLM call with multimodal input
       const response = await ctx.llmCall('gpt-4o', async () => {
         return await openai.chat.completions.create({
           model: 'gpt-4o',
@@ -290,16 +234,11 @@ After uploading, reference media in span inputs and outputs using content blocks
   <Tab title="Python">
     ```python
     from foil import Foil, ContentBlock, content
-    import uuid
 
     foil = Foil(api_key="sk_live_...")
 
-    # Upload the file
     upload = foil.upload_media("/path/to/report.pdf")
 
-    span_id = str(uuid.uuid4())
-
-    # Start a span with multimodal input
     foil.start_span({
         "spanId": span_id,
         "name": "gpt-4o",
@@ -312,159 +251,25 @@ After uploading, reference media in span inputs and outputs using content blocks
             )
         )
     })
-
-    response = llm_call(...)
-
-    # End the span
-    foil.end_span({
-        "spanId": span_id,
-        "agentName": "document-analyzer",
-        "output": response.text,
-        "tokens": {"prompt": 500, "completion": 200, "total": 700}
-    })
     ```
   </Tab>
 </Tabs>
 
 ## Retrieving Media
 
-### Get Media Info
+```javascript
+const media = await foil.getMedia('media-abc-123');
+console.log(media.category);            // 'document'
+console.log(media.processing.status);   // 'completed'
 
-Fetch information about an uploaded media file, including processing status and extracted content.
+// Include extracted content
+const media = await foil.getMedia('media-abc-123', {
+  content: 'extracted'
+});
+console.log(media.extracted.text.preview); // First 1000 chars
+```
 
-<Tabs>
-  <Tab title="JavaScript">
-    ```javascript
-    const media = await foil.getMedia('media-abc-123');
-    console.log(media.category);            // 'document'
-    console.log(media.processing.status);   // 'completed'
-
-    // Include extracted content
-    const media = await foil.getMedia('media-abc-123', {
-      content: 'extracted'
-    });
-    console.log(media.extracted.text.preview); // First 1000 chars
-    ```
-  </Tab>
-  <Tab title="Python">
-    ```python
-    media = foil.get_media("media-abc-123")
-    print(media["category"])              # "document"
-    print(media["processing"]["status"])  # "completed"
-
-    # Include extracted content
-    media = foil.get_media("media-abc-123", content="extracted")
-    print(media["extracted"]["text"]["preview"])
-    ```
-  </Tab>
-</Tabs>
-
-### Get Download URL
-
-Get a presigned URL to download media content.
-
-<Tabs>
-  <Tab title="JavaScript">
-    ```javascript
-    // Original file
-    const { url, expiresAt } = await foil.getMediaUrl('media-abc-123');
-
-    // Extracted text
-    const { url } = await foil.getMediaUrl('media-abc-123', 'extracted');
-
-    // Structured data (spreadsheets)
-    const { url } = await foil.getMediaUrl('media-abc-123', 'structured');
-    ```
-  </Tab>
-  <Tab title="Python">
-    ```python
-    # Original file
-    result = foil.get_media_url("media-abc-123")
-    print(result["url"])
-
-    # Extracted text
-    result = foil.get_media_url("media-abc-123", "extracted")
-
-    # Structured data (spreadsheets)
-    result = foil.get_media_url("media-abc-123", "structured")
-    ```
-  </Tab>
-</Tabs>
-
-#### Content Modes
-
-| Mode | Description |
-|------|-------------|
-| `original` | Original uploaded file (default) |
-| `extracted` | Extracted plain text |
-| `preview` | Preview content |
-| `structured` | Structured JSON data (spreadsheets only) |
-
-### Batch Media Info
-
-Get information for multiple media files in one call.
-
-<Tabs>
-  <Tab title="JavaScript">
-    ```javascript
-    const { media } = await foil.batchMediaInfo([
-      'media-123', 'media-456', 'media-789'
-    ]);
-
-    media.forEach(m => {
-      console.log(`${m.filename} (${m.category}): ${m.processing.status}`);
-    });
-    ```
-  </Tab>
-  <Tab title="Python">
-    ```python
-    result = foil.batch_media_info(["media-123", "media-456", "media-789"])
-
-    for m in result["media"]:
-        print(f"{m['filename']} ({m['category']}): {m['processing']['status']}")
-    ```
-  </Tab>
-</Tabs>
-
-## Processing Pipeline
-
-When you upload a file, Foil processes it based on its category:
-
-### Documents (PDF, DOCX, RTF)
-
-- **Text extraction** using `pdf-parse` (PDF) and `mammoth` (DOCX)
-- Extracted text stored in S3 (up to 100 KB)
-- Metadata: page count, author, title, creation date
-- Preview: first 1,000 characters stored for quick access
-
-### Spreadsheets (CSV, XLSX, ODS)
-
-- **Text representation** — pipe-delimited table (up to 100 KB)
-- **Structured JSON** — headers + row data (up to 1,000 rows per sheet)
-- Both stored in S3 for retrieval
-- Metadata: row count, column count, headers, sheet names
-
-### Code & Text Files
-
-- Original content stored as-is (up to 100 KB extracted)
-- Line count computed for metadata
-- Preview: first 1,000 characters
-
-### Images (PNG, JPEG, GIF, WebP)
-
-- Dimensions extracted (width, height, aspect ratio, format)
-- Original image stored in S3
-- No text extraction — images are referenced directly in evaluations
-
-## Evaluations and Media
-
-When a span contains media content blocks, Foil's evaluation system automatically includes extracted text in the LLM analysis. The evaluation pipeline:
-
-1. Waits for all media in the span to finish processing
-2. Fetches extracted text (up to 15,000 characters per file)
-3. Includes formatted content in the evaluation prompt
-
-For spreadsheets, up to 100 rows are included. For images, a placeholder reference is used. No manual configuration is needed — media-aware evaluation happens automatically.
+When evaluations run on spans containing media content blocks, Foil automatically includes extracted text (up to 15,000 characters per file) in the analysis. No manual configuration needed.
 
 ## Limitations
 
@@ -494,10 +299,6 @@ For spreadsheets, up to 100 rows are included. For images, a placeholder referen
     Text extraction is asynchronous. If you need extracted content immediately, poll `getMedia()` until `processing.status` is `'completed'`.
   </Accordion>
 
-  <Accordion title="Associate media with spans via upload options">
-    Pass `spanId` and `direction` when uploading to automatically link media to a span without needing content blocks. This is useful for background uploads.
-  </Accordion>
-
   <Accordion title="Prefer file paths over Buffers">
     When possible, pass file paths to `uploadMedia()` or `ContentBlock.file()`. This lets the SDK auto-detect the filename and MIME type. When using Buffer/bytes, always provide a `filename`.
   </Accordion>
@@ -506,7 +307,7 @@ For spreadsheets, up to 100 rows are included. For images, a placeholder referen
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Tracing" icon="route" href="/concepts/traces">
+  <Card title="Traces & Spans" icon="route" href="/concepts/traces-and-spans">
     Learn about traces and span hierarchy
   </Card>
   <Card title="Alerting" icon="bell" href="/features/alerting">

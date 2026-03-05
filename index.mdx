@@ -52,20 +52,31 @@ Choose the integration method that works best for you:
         });
         const openai = new OpenAI();
 
+        const toolMap = {
+          search: async (args) => searchAPI(args.query),
+        };
+
         await foil.trace(async (ctx) => {
-          // LLM call — automatically creates a span
-          const response = await ctx.llmCall('gpt-4o', async () => {
+          const messages = [{ role: 'user', content: 'Search for recent AI news' }];
+
+          // LLM call with function calling
+          let response = await ctx.llmCall('gpt-4o', async () => {
             return await openai.chat.completions.create({
-              model: 'gpt-4o',
-              messages: [{ role: 'user', content: 'Hello!' }],
+              model: 'gpt-4o', messages, tools,
             });
           });
 
-          // Tool calls nest under the LLM span
-          await ctx.tool('search', async () => {
-            return await searchAPI(response);
-          });
-        }, { name: 'chat-completion' });
+          // Agentic loop — LLM decides which tools to call
+          while (response.choices[0].message.tool_calls) {
+            const toolMessages = await ctx.executeTools(response, toolMap);
+            messages.push(response.choices[0].message, ...toolMessages);
+            response = await ctx.llmCall('gpt-4o', async () => {
+              return await openai.chat.completions.create({
+                model: 'gpt-4o', messages, tools,
+              });
+            });
+          }
+        }, { name: 'search-agent' });
 
         await foil.shutdown();
         ```
@@ -85,7 +96,7 @@ Choose the integration method that works best for you:
         ```
       </Step>
       <Step title="Initialize Foil">
-        Pass `instrumentModules` to auto-trace all LLM calls — no manual wrapping needed.
+        Pass `instrumentModules` to auto-trace LLM calls. Use `ctx.executeTools()` for agentic tool calling.
         ```javascript
         const OpenAI = require('openai');
         const { Foil } = require('@getfoil/foil-js');
@@ -96,12 +107,23 @@ Choose the integration method that works best for you:
           instrumentModules: { openAI: OpenAI },
         });
 
-        // All OpenAI calls are now automatically traced
         const openai = new OpenAI();
-        const response = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          messages: [{ role: 'user', content: 'Hello!' }],
-        });
+        const toolMap = { search: async (args) => searchAPI(args.query) };
+
+        await foil.trace(async (ctx) => {
+          const messages = [{ role: 'user', content: 'Search for recent AI news' }];
+          let response = await openai.chat.completions.create({
+            model: 'gpt-4o', messages, tools,
+          });
+
+          while (response.choices[0].message.tool_calls) {
+            const toolMessages = await ctx.executeTools(response, toolMap);
+            messages.push(response.choices[0].message, ...toolMessages);
+            response = await openai.chat.completions.create({
+              model: 'gpt-4o', messages, tools,
+            });
+          }
+        }, { name: 'search-agent' });
         ```
       </Step>
       <Step title="View in Dashboard">
@@ -156,13 +178,13 @@ Capture user feedback and custom metrics directly tied to your traces:
   <Card title="Quickstart" icon="rocket" href="/quickstart">
     Get up and running in 5 minutes
   </Card>
-  <Card title="Auto-Instrumentation" icon="circle-nodes" href="/sdks/javascript/auto-instrumentation">
+  <Card title="Auto-Instrumentation" icon="circle-nodes" href="/sdks/javascript/index#auto-instrumentation">
     Zero-code auto-instrumentation
   </Card>
-  <Card title="JavaScript SDK" icon="js" href="/sdks/javascript/installation">
+  <Card title="JavaScript SDK" icon="js" href="/sdks/javascript/index">
     Full-featured SDK with tracing support
   </Card>
-  <Card title="Python SDK" icon="python" href="/sdks/python/installation">
+  <Card title="Python SDK" icon="python" href="/sdks/python/index">
     Lightweight SDK for Python apps
   </Card>
 </CardGroup>

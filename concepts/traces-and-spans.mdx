@@ -1,0 +1,124 @@
+---
+title: Traces & Spans
+description: Understanding traces and spans in Foil
+---
+
+# Traces & Spans
+
+## What is a Trace?
+
+A **trace** represents a complete unit of work — like handling a user request, processing a document, or running an agent workflow. Think of it as a timeline:
+
+```
+User asks: "What's the weather in Paris?"
+
+Trace Timeline:
+├─ Agent receives query (0ms)
+├─ LLM plans next action (200ms)
+├─ Tool: weather_api called (400ms)
+├─ Tool returns result (800ms)
+├─ LLM generates response (1000ms)
+└─ Response sent to user (1200ms)
+```
+
+Each step in this timeline is a **span**. Together, all spans form the complete trace.
+
+| Property | Description |
+|----------|-------------|
+| `traceId` | Unique identifier (UUID) |
+| `name` | Human-readable name (optional) |
+| `startTime` / `endTime` | When the trace began and completed |
+| `duration` | Total time in milliseconds |
+| `status` | `completed`, `error`, or `running` |
+| `spans` | Array of child spans |
+
+## What is a Span?
+
+A **span** represents a single operation within a trace — like an LLM call, tool execution, or retrieval step.
+
+| Property | Description |
+|----------|-------------|
+| `spanId` | Unique identifier |
+| `traceId` | Parent trace identifier |
+| `parentSpanId` | Parent span (for nesting) |
+| `spanKind` | Type of operation |
+| `name` | Operation name (e.g., model name, tool name) |
+| `startTime` / `endTime` | When operation began and completed |
+| `durationMs` | Duration in milliseconds |
+| `input` / `output` | Input and output data |
+| `status` | `completed` or `error` |
+| `tokens` | Token usage (for LLM spans) |
+
+## Span Types
+
+| Type | Description | Convenience Method |
+|------|-------------|--------------------|
+| `llm` | LLM API calls | `ctx.llmCall(model, fn)` |
+| `tool` | Tool/function executions | `ctx.executeTools(response, toolMap)` or `ctx.tool(name, fn)` |
+| `retriever` | RAG retrieval operations | `ctx.retriever(name, fn)` |
+| `embedding` | Embedding generation | `ctx.embedding(model, fn)` |
+| `agent` | High-level agent orchestration | `ctx.startSpan(SpanKind.AGENT, ...)` |
+| `chain` | Pipeline/chain steps | `ctx.startSpan(SpanKind.CHAIN, ...)` |
+| `custom` | Any other operation | `ctx.wrapInSpan(SpanKind.CUSTOM, ...)` |
+
+See the [JavaScript SDK](/sdks/javascript/index#span-types) or [Python SDK](/sdks/python/index#using-traces) for code examples of each span type.
+
+## Trace Hierarchy
+
+Traces contain spans organized in a tree structure:
+
+```
+Trace: customer-support-request
+│
+├── Span: agent (root)
+│   │
+│   ├── Span: llm (classify-intent)
+│   │   └── Model: gpt-4o, Duration: 450ms
+│   │
+│   ├── Span: retriever (search-knowledge-base)
+│   │   └── Documents: 5 retrieved
+│   │
+│   └── Span: llm (generate-response)
+│       └── Model: gpt-4o, Duration: 800ms
+│
+└── Total Duration: 1450ms
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="One trace per user request">
+    Create a new trace for each distinct user interaction. Don't reuse trace IDs across requests.
+  </Accordion>
+
+  <Accordion title="Name traces descriptively">
+    Use names that describe the workflow: `process-customer-query`, `generate-report`, `analyze-document`.
+  </Accordion>
+
+  <Accordion title="Use appropriate span types">
+    Choose the span type that best represents the operation. This enables better filtering and analytics in the dashboard.
+  </Accordion>
+
+  <Accordion title="Always record tokens for LLM spans">
+    Token counts are essential for cost tracking and optimization.
+  </Accordion>
+
+  <Accordion title="End spans properly">
+    Always call `span.end()` even on errors. Use try/finally or convenience methods like `ctx.llmCall()` for automatic handling.
+  </Accordion>
+
+  <Accordion title="Don't over-nest">
+    Keep span depth reasonable (typically 3-5 levels max). Deep nesting makes traces hard to read.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Signals" icon="signal" href="/concepts/signals">
+    Add feedback and metrics to traces
+  </Card>
+  <Card title="Alerting" icon="bell" href="/features/alerting">
+    Get notified on quality issues
+  </Card>
+</CardGroup>

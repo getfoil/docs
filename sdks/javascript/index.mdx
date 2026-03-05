@@ -1,0 +1,831 @@
+---
+title: JavaScript SDK
+description: Complete guide to the Foil JavaScript SDK
+---
+
+# JavaScript SDK
+
+The Foil JavaScript SDK provides full-featured tracing, logging, and feedback collection for Node.js applications.
+
+<Tip>
+  **Full examples**: Browse runnable examples at [github.com/getfoil/foil-examples](https://github.com/getfoil/foil-examples) — including [hello-foil](https://github.com/getfoil/foil-examples/tree/main/hello-foil) (auto-instrumentation) and [customer-support-agent](https://github.com/getfoil/foil-examples/tree/main/customer-support-agent) (SDK with tools and feedback).
+</Tip>
+
+## Installation
+
+**Requirements:** Node.js 18 or higher
+
+```bash
+npm install @getfoil/foil-js
+```
+
+Or with yarn / pnpm:
+
+```bash
+yarn add @getfoil/foil-js
+# or
+pnpm add @getfoil/foil-js
+```
+
+### Configuration
+
+Get your API key from the [Foil Dashboard](https://app.getfoil.ai) under **Settings > API Keys**.
+
+<Warning>
+  Never hardcode API keys in your source code. Use environment variables instead.
+</Warning>
+
+```bash
+# .env
+FOIL_API_KEY=sk_live_xxx_yyy
+```
+
+```javascript
+import { Foil } from '@getfoil/foil-js';
+
+const foil = new Foil({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent',
+});
+```
+
+### Configuration Options
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `apiKey` | string | Yes | - | Your Foil API key |
+| `agentName` | string | No | `'default-agent'` | Unique identifier for your agent |
+| `instrumentModules` | object | No | - | Module map for [auto-instrumentation](#auto-instrumentation) (e.g., `{ openAI: OpenAI }`) |
+| `defaultModel` | string | No | - | Default model name for spans |
+| `debug` | boolean | No | `false` | Enable debug logging |
+
+### Debug Mode
+
+Enable debug mode to see detailed logs of all SDK operations:
+
+```javascript
+const foil = new Foil({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent',
+  debug: true,
+});
+```
+
+Or set the environment variable:
+
+```bash
+FOIL_DEBUG=true
+```
+
+Debug output shows span start/end events with IDs, nesting depth visualization, timing information, and API call results.
+
+## Quick Start
+
+The core concept is the **trace**. A trace represents a complete unit of work (like handling a user request) and contains one or more **spans** (individual operations like LLM calls, tool executions, or retrieval steps).
+
+```javascript
+import { Foil } from '@getfoil/foil-js';
+import OpenAI from 'openai';
+
+const openai = new OpenAI();
+const foil = new Foil({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent',
+});
+
+// Create a trace
+const result = await foil.trace(async (ctx) => {
+  // LLM call — automatically creates and closes a span
+  const response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'Hello, world!' }],
+    });
+  });
+
+  return response.choices[0].message.content;
+}, { name: 'greeting' });
+```
+
+### Nested Spans
+
+The key benefit of `ctx.llmCall()` is that other spans automatically nest under it, giving you a clear tree in the dashboard:
+
+```
+Trace: research-agent
+├── llm (gpt-4o) — decides what tools to call
+│   ├── tool (web_search) — searches the web
+│   └── tool (calculator) — computes a result
+└── llm (gpt-4o) — synthesizes final answer
+```
+
+```javascript
+await foil.trace(async (ctx) => {
+  const tools = [
+    { type: 'function', function: { name: 'web_search', parameters: { /* ... */ } } },
+    { type: 'function', function: { name: 'calculator', parameters: { /* ... */ } } },
+  ];
+
+  const toolMap = {
+    web_search: async (args) => searchAPI(args.query),
+    calculator: async (args) => compute(args.expression),
+  };
+
+  const messages = [{ role: 'user', content: 'Research and calculate the GDP of France' }];
+
+  // First LLM call — plans the approach and requests tools
+  let response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages,
+      tools,
+    });
+  });
+
+  // Agentic loop — LLM decides which tools to call
+  while (response.choices[0].message.tool_calls) {
+    const toolMessages = await ctx.executeTools(response, toolMap);
+    messages.push(response.choices[0].message, ...toolMessages);
+
+    response = await ctx.llmCall('gpt-4o', async () => {
+      return await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages,
+        tools,
+      });
+    });
+  }
+
+  return response.choices[0].message.content;
+}, { name: 'research-agent' });
+```
+
+### Convenience Methods
+
+The `TraceContext` provides shorthand methods for common span types. Each wraps your async function in a span and automatically records the return value as output:
+
+```javascript
+await foil.trace(async (ctx) => {
+  // LLM call
+  const response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({ model: 'gpt-4o', messages, tools });
+  });
+
+  // Tool execution — LLM-driven (recommended for agentic use)
+  const toolMessages = await ctx.executeTools(response, {
+    web_search: async (args) => searchAPI(args.query),
+  });
+
+  // Tool execution — code-driven (for hardcoded pipeline steps)
+  const data = await ctx.tool('fetch-config', async () => {
+    return await loadConfig();
+  });
+
+  // Retriever (RAG)
+  const docs = await ctx.retriever('vector-db', async () => {
+    return await vectorStore.search(query);
+  });
+
+  // Embedding generation
+  const embeddings = await ctx.embedding('text-embedding-3-small', async () => {
+    return await createEmbeddings(texts);
+  });
+});
+```
+
+## Tool Tracing
+
+Foil provides two ways to trace tool calls, depending on whether the **LLM decides** which tools to run or **your code decides**.
+
+### `ctx.executeTools()` — LLM-Driven (Recommended)
+
+Use this when your agent uses OpenAI function calling. The LLM decides which tools to call at runtime — you define the available tools and their implementations, then `executeTools()` handles everything:
+
+1. Reads `tool_calls` from the OpenAI response
+2. Executes each tool function with the LLM-provided arguments
+3. Creates a traced TOOL span for each call (name, input, output, duration)
+4. Returns formatted `tool` messages ready to feed back to the next OpenAI call
+
+```javascript
+// 1. Define tool schemas (tell OpenAI what's available)
+const tools = [{
+  type: 'function',
+  function: {
+    name: 'get_weather',
+    description: 'Get current weather for a location',
+    parameters: {
+      type: 'object',
+      properties: { location: { type: 'string' } },
+      required: ['location'],
+    },
+  },
+}];
+
+// 2. Define tool implementations (what actually runs)
+const toolMap = {
+  get_weather: async (args) => fetchWeather(args.location),
+};
+
+// 3. Agentic loop — LLM decides which tools to call
+await foil.trace(async (ctx) => {
+  const messages = [
+    { role: 'user', content: 'What is the weather in Paris and Tokyo?' },
+  ];
+
+  let response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages,
+      tools,
+    });
+  });
+
+  // Keep going until the LLM stops requesting tools
+  while (response.choices[0].message.tool_calls) {
+    const toolMessages = await ctx.executeTools(response, toolMap);
+    messages.push(response.choices[0].message, ...toolMessages);
+
+    response = await ctx.llmCall('gpt-4o', async () => {
+      return await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages,
+        tools,
+      });
+    });
+  }
+
+  return response.choices[0].message.content;
+}, { name: 'weather-agent' });
+```
+
+This produces:
+
+```
+Trace: weather-agent
+├── llm (gpt-4o) — requests tool calls
+│   ├── tool (get_weather) — Paris
+│   └── tool (get_weather) — Tokyo
+└── llm (gpt-4o) — synthesizes final answer
+```
+
+You don't manually specify tool names or decide which tools to call — the LLM does. The SDK reads tool names and arguments directly from `response.choices[0].message.tool_calls`.
+
+### `ctx.tool()` — Code-Driven (Manual)
+
+Use this for fixed pipeline steps that always run regardless of what the LLM says — like a mandatory database write, a config lookup, or a preprocessing step.
+
+```javascript
+await foil.trace(async (ctx) => {
+  // This always runs — the LLM doesn't decide to call it
+  const config = await ctx.tool('load-config', async () => {
+    return await fetchConfig();
+  });
+
+  // Fixed preprocessing step
+  const enriched = await ctx.tool('enrich-data', async () => {
+    return await enrichWithMetadata(data);
+  }, { input: { recordCount: data.length } });
+
+  // Then use the results in an LLM call
+  const response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: `Analyze: ${JSON.stringify(enriched)}` }],
+    });
+  });
+});
+```
+
+### When to Use Which
+
+| Pattern | Who decides? | Tool name comes from | Use when |
+|---------|-------------|---------------------|----------|
+| `ctx.executeTools(response, toolMap)` | **The LLM** | OpenAI response `tool_calls` | Agentic tool calling — LLM picks tools at runtime |
+| `ctx.tool(name, fn)` | **Your code** | You hardcode it | Fixed pipeline steps that always run |
+
+<Note>
+  For most AI agents, **`ctx.executeTools()` is the right choice**. Use `ctx.tool()` only for operations that aren't driven by LLM decisions.
+</Note>
+
+### What Gets Captured
+
+| Field | Description |
+|-------|-------------|
+| Model | The model used (gpt-4o, gpt-4o-mini, etc.) |
+| Input | Full message array |
+| Output | Assistant response content |
+| Tokens | Prompt, completion, and total tokens |
+| Latency | Total request duration |
+| TTFT | Time to first token (streaming) |
+| Tool Calls | Function/tool invocations (name, args, result, duration) |
+| Errors | Any API errors |
+
+### Streaming
+
+Streaming is fully supported:
+
+```javascript
+await foil.trace(async (ctx) => {
+  const stream = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'Write a haiku' }],
+      stream: true,
+    });
+  });
+
+  for await (const chunk of stream) {
+    process.stdout.write(chunk.choices[0]?.delta?.content || '');
+  }
+});
+```
+
+## Auto-Instrumentation
+
+Foil supports automatic instrumentation of LLM calls via [OpenLLMetry](https://github.com/traceloop/openllmetry-js). Pass `instrumentModules` to the `Foil` constructor and all calls to supported providers are traced automatically — no manual wrapping needed.
+
+<Note>
+  Auto-instrumentation is an **optional enhancement**. For most use cases, `ctx.llmCall()` is the recommended approach — it works with any LLM provider and gives you nested span trees (tools under LLM calls). Auto-instrumentation captures LLM calls automatically; combine it with `ctx.executeTools()` to also capture tool calls driven by OpenAI function calling.
+</Note>
+
+### Basic Setup
+
+```javascript
+const OpenAI = require('openai');
+const { Foil } = require('@getfoil/foil-js');
+
+// Pass instrumentModules to enable auto-instrumentation
+const foil = new Foil({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-ai-agent',
+  instrumentModules: { openAI: OpenAI },
+});
+
+// Now all OpenAI calls are automatically traced!
+const openai = new OpenAI();
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Hello!' }],
+});
+// ↑ This call is automatically traced to Foil
+```
+
+### With foil.trace()
+
+Wrap auto-instrumented calls in `foil.trace()` to group them under a single trace:
+
+```javascript
+const foil = new Foil({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'my-agent',
+  instrumentModules: { openAI: OpenAI },
+});
+
+const openai = new OpenAI();
+
+await foil.trace(async (ctx) => {
+  // Both calls are automatically traced under the same trace
+  const plan = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: 'Plan a trip to Japan' }],
+  });
+
+  const details = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: 'Give me details on day 1' }],
+  });
+}, { name: 'trip-planner' });
+```
+
+<Warning>
+  **Don't combine `instrumentModules` with `ctx.llmCall()`** for the same provider. Using both creates duplicate spans — one from auto-instrumentation and one from `ctx.llmCall()`. Choose one approach per provider.
+</Warning>
+
+### With Tool Calling (executeTools)
+
+Auto-instrumentation captures LLM calls automatically, but tool execution still needs `ctx.executeTools()`. This is the recommended pattern for agentic tool-calling loops with auto-instrumentation:
+
+```javascript
+const foil = new Foil({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'order-agent',
+  instrumentModules: { openAI: OpenAI },
+});
+
+const openai = new OpenAI();
+
+const tools = [{
+  type: 'function',
+  function: {
+    name: 'check_inventory',
+    parameters: {
+      type: 'object',
+      properties: { sku: { type: 'string' } },
+      required: ['sku'],
+    },
+  },
+}];
+
+const toolMap = {
+  check_inventory: async (args) => getInventory(args.sku),
+};
+
+await foil.trace(async (ctx) => {
+  const messages = [{ role: 'user', content: 'Check stock for SKU-1000' }];
+
+  // LLM calls are auto-captured — no ctx.llmCall() needed
+  let response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages,
+    tools,
+  });
+
+  // Tool-calling loop
+  while (response.choices[0].message.tool_calls) {
+    // executeTools reads tool names/args from the response,
+    // executes each one, and auto-traces them as TOOL spans
+    const toolMessages = await ctx.executeTools(response, toolMap);
+    messages.push(response.choices[0].message, ...toolMessages);
+
+    response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages,
+      tools,
+    });
+  }
+
+  return response.choices[0].message.content;
+}, { name: 'inventory-check' });
+```
+
+This produces:
+
+```
+Trace: inventory-check
+├── llm (gpt-4o) — auto-captured, returns tool_calls
+│   └── tool (check_inventory) — via ctx.executeTools()
+├── llm (gpt-4o) — auto-captured, final response
+```
+
+### Supported Libraries
+
+| Library | Features |
+|---------|----------|
+| **OpenAI** | Chat completions, embeddings, assistants, function calling |
+| **Anthropic** | Claude messages, streaming |
+| **Azure OpenAI** | All Azure OpenAI endpoints |
+| **Cohere** | Chat, generate, embed |
+| **Google Generative AI** | Gemini models |
+| **AWS Bedrock** | Bedrock runtime |
+| **LlamaIndex** | Queries, retrievers |
+
+### Graceful Shutdown
+
+Always shut down gracefully to flush pending spans:
+
+```javascript
+process.on('SIGTERM', async () => {
+  await foil.shutdown();
+  process.exit(0);
+});
+
+// Or flush manually before exit
+await foil.flush();
+```
+
+<Accordion title="Advanced: Manual OTEL Setup">
+  For full control over the OpenTelemetry pipeline:
+
+  ### OTEL Module
+
+  ```javascript
+  const { Foil } = require('@getfoil/foil-js/otel');
+
+  Foil.init({
+    apiKey: process.env.FOIL_API_KEY,
+    agentName: 'my-ai-agent',
+  });
+  ```
+
+  ### Manual FoilSpanProcessor
+
+  ```javascript
+  const { FoilSpanProcessor } = require('@getfoil/foil-js/otel');
+  const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+  const { Resource } = require('@opentelemetry/resources');
+
+  const provider = new NodeTracerProvider({
+    resource: new Resource({
+      'service.name': 'my-custom-agent',
+      'deployment.environment': 'production',
+    }),
+  });
+
+  provider.addSpanProcessor(new FoilSpanProcessor({
+    apiKey: process.env.FOIL_API_KEY,
+    maxBatchSize: 100,
+    scheduledDelayMs: 5000,
+    exportTimeoutMs: 30000,
+    debug: true,
+  }));
+
+  provider.register();
+  ```
+
+  ### FoilSpanProcessor Options
+
+  | Option | Type | Default | Description |
+  |--------|------|---------|-------------|
+  | `apiKey` | string | Required | Your Foil API key |
+  | `endpoint` | string | `https://api.getfoil.ai/api/otlp/v1/traces` | OTLP endpoint |
+  | `maxBatchSize` | number | 100 | Maximum spans per batch |
+  | `scheduledDelayMs` | number | 5000 | Batch export interval in ms |
+  | `exportTimeoutMs` | number | 30000 | Export request timeout in ms |
+  | `debug` | boolean | false | Enable debug logging |
+
+  ### Custom Attributes
+
+  ```javascript
+  const span = tracer.startSpan('my-operation');
+  span.setAttribute('foil.session_id', sessionId);
+  span.setAttribute('foil.end_user_id', userId);
+  span.setAttribute('foil.cost', 0.0023);
+  span.end();
+  ```
+
+  | Attribute | Description |
+  |-----------|-------------|
+  | `foil.agent_name` | Override agent name for this span |
+  | `foil.agent_id` | Explicit agent ID |
+  | `foil.session_id` | Session/conversation ID |
+  | `foil.end_user_id` | End user identifier |
+  | `foil.end_user.*` | Custom end user properties |
+  | `foil.cost` | Cost in dollars |
+</Accordion>
+
+<AccordionGroup>
+  <Accordion title="Troubleshooting: Spans not appearing">
+    - Check that your API key is correct
+    - Ensure `Foil` is constructed with `instrumentModules` before any LLM calls
+    - Call `await foil.flush()` before process exit
+    - Enable debug logging to see export status
+  </Accordion>
+  <Accordion title="Troubleshooting: Missing LLM details (tokens, model)">
+    - Ensure `new Foil({ instrumentModules })` is called at the top of your app, before importing LLM libraries
+    - Check that the LLM library is supported
+    - Some details require specific library versions
+  </Accordion>
+  <Accordion title="Troubleshooting: Duplicate spans">
+    - Don't use `instrumentModules` and `ctx.llmCall()` for the same LLM calls
+    - Don't initialize both `Foil.init()` from `@getfoil/foil-js/otel` and `new Foil({ instrumentModules })`
+  </Accordion>
+</AccordionGroup>
+
+## Signals and Feedback
+
+Record custom metrics and user feedback tied to your traces:
+
+```javascript
+await foil.trace(async (ctx) => {
+  const response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages,
+    });
+  });
+
+  // Record a custom signal
+  await ctx.recordSignal('response_length', response.choices[0].message.content.length);
+
+  // Record user feedback (thumbs up/down)
+  await ctx.recordFeedback(true); // true = positive
+
+  // Record a star rating
+  await ctx.recordRating(4.5);
+
+  return response.choices[0].message.content;
+}, { name: 'chat-with-feedback' });
+```
+
+## Span Types
+
+Foil supports several span types to categorize different operations:
+
+```javascript
+import { SpanKind } from '@getfoil/foil-js';
+
+SpanKind.AGENT      // 'agent' - Top-level agent operations
+SpanKind.LLM        // 'llm' - LLM API calls
+SpanKind.TOOL       // 'tool' - Tool executions
+SpanKind.CHAIN      // 'chain' - Chain/pipeline steps
+SpanKind.RETRIEVER  // 'retriever' - RAG retrieval
+SpanKind.EMBEDDING  // 'embedding' - Embedding generations
+SpanKind.CUSTOM     // 'custom' - Custom operations
+```
+
+## Error Handling
+
+Errors are automatically captured when spans fail:
+
+```javascript
+await foil.trace(async (ctx) => {
+  // Errors are automatically recorded on the span and re-thrown
+  const response = await ctx.llmCall('gpt-4o', async () => {
+    return await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages,
+    });
+    // If this throws, the span records the error automatically
+  });
+});
+```
+
+## Complete Example
+
+```javascript
+import OpenAI from 'openai';
+import { Foil } from '@getfoil/foil-js';
+
+const openai = new OpenAI();
+const foil = new Foil({
+  apiKey: process.env.FOIL_API_KEY,
+  agentName: 'customer-support-agent',
+});
+
+async function handleUserQuery(query, userId) {
+  return await foil.trace(async (ctx) => {
+    // Step 1: Search knowledge base
+    const docs = await ctx.retriever('knowledge-base', async () => {
+      return await searchKnowledgeBase(query);
+    }, { input: { query } });
+
+    // Step 2: Generate response with context
+    const response = await ctx.llmCall('gpt-4o', async () => {
+      return await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: `Context: ${docs.join('\n')}` },
+          { role: 'user', content: query },
+        ],
+      });
+    }, {
+      input: { query, context: docs },
+      properties: { userId },
+    });
+
+    // Step 3: Record a signal
+    await ctx.recordSignal('response_confidence', 0.95);
+
+    return response.choices[0].message.content;
+  }, {
+    name: 'handle-query',
+    properties: { userId },
+  });
+}
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  await foil.shutdown();
+  process.exit(0);
+});
+```
+
+## Advanced Patterns
+
+<AccordionGroup>
+  <Accordion title="Manual span control with startSpan">
+    For advanced flows where you need explicit control over parent-child relationships:
+
+    ```javascript
+    await foil.trace(async (ctx) => {
+      const rootSpan = await ctx.startSpan(SpanKind.AGENT, 'root');
+
+      // Create child context for parallel work
+      const childCtx = rootSpan.createChildContext();
+
+      // This span is explicitly a child of rootSpan
+      const childSpan = await childCtx.startSpan(SpanKind.LLM, 'gpt-4o');
+      await childSpan.end({ output: '...' });
+
+      await rootSpan.end({ output: 'done' });
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Multi-agent handoffs with createChildContext">
+    When one agent delegates to another, use `span.createChildContext()` to create nested agent spans:
+
+    ```javascript
+    await foil.trace(async (ctx) => {
+      const coordinatorSpan = await ctx.startSpan(SpanKind.AGENT, 'coordinator');
+      const childCtx = coordinatorSpan.createChildContext();
+
+      const flightSpan = await childCtx.startSpan(SpanKind.AGENT, 'flight-searcher');
+      // ... sub-agent work ...
+      await flightSpan.end({ output: 'Flight options compiled' });
+
+      const hotelSpan = await childCtx.startSpan(SpanKind.AGENT, 'hotel-searcher');
+      // ... sub-agent work ...
+      await hotelSpan.end({ output: 'Hotel options compiled' });
+
+      await coordinatorSpan.end({ output: 'Trip plan complete' });
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Retrieving traces">
+    Fetch completed traces for debugging or analysis:
+
+    ```javascript
+    const trace = await foil.getTrace(traceId);
+
+    console.log('Trace:', trace.traceId);
+    console.log('Spans:', trace.spans.length);
+
+    for (const span of trace.spans) {
+      console.log(`${span.depth}: ${span.spanKind} - ${span.name}`);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Trace context propagation">
+    Pass trace context to external services via headers:
+
+    ```javascript
+    await foil.trace(async (ctx) => {
+      const response = await fetch('https://another-service.com/api', {
+        headers: {
+          'x-trace-id': ctx.traceId,
+          'x-parent-span-id': ctx.currentParentEventId,
+        },
+      });
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Fire-and-forget logging">
+    For non-critical telemetry without full tracing:
+
+    ```javascript
+    foil.log({
+      model: 'gpt-4o',
+      input: messages,
+      output: response,
+      latency: duration,
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Provider-agnostic usage">
+    `ctx.llmCall()` works with **any LLM provider** — not just OpenAI:
+
+    ```javascript
+    await foil.trace(async (ctx) => {
+      // Anthropic
+      const claudeResponse = await ctx.llmCall('claude-sonnet-4-20250514', async () => {
+        return await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: 'Hello!' }],
+        });
+      });
+
+      // Local model via Ollama
+      const localResponse = await ctx.llmCall('llama3', async () => {
+        return await fetch('http://localhost:11434/api/chat', {
+          method: 'POST',
+          body: JSON.stringify({ model: 'llama3', messages }),
+        }).then(r => r.json());
+      });
+
+      // Any HTTP API
+      const customResponse = await ctx.llmCall('my-model', async () => {
+        return await myCustomLLMClient.generate(prompt);
+      });
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Custom metadata and properties">
+    Add custom properties to spans for filtering and analysis:
+
+    ```javascript
+    await foil.trace(async (ctx) => {
+      const response = await ctx.llmCall('gpt-4o', async () => {
+        return await openai.chat.completions.create({ model: 'gpt-4o', messages });
+      }, {
+        input: messages,
+        properties: {
+          userId: 'user-123',
+          sessionId: 'session-456',
+          feature: 'chat',
+        },
+      });
+    }, {
+      name: 'chat',
+      properties: { userId: 'user-123' },
+    });
+    ```
+  </Accordion>
+</AccordionGroup>

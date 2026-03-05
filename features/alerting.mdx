@@ -60,9 +60,7 @@ User Request → Your Agent → Foil Ingestion
                           └─────────────────┘
 ```
 
-## Configuring Alerts
-
-### Per-Agent Configuration
+## Per-Agent Configuration
 
 Configure alerts in the dashboard or via API:
 
@@ -85,16 +83,8 @@ PUT /api/agents/:agentId/alerts
         "severity": "critical",
         "channels": ["email", "sms"]
       },
-      "stuck": {
-        "enabled": true,
-        "threshold": 0.6,
-        "severity": "warning"
-      },
-      "quality": {
-        "enabled": true,
-        "threshold": 0.5,
-        "severity": "warning"
-      }
+      "stuck": { "enabled": true, "threshold": 0.6, "severity": "warning" },
+      "quality": { "enabled": true, "threshold": 0.5, "severity": "warning" }
     }
   },
   "thresholds": {
@@ -104,12 +94,8 @@ PUT /api/agents/:agentId/alerts
     "cost": 1.0
   },
   "contacts": {
-    "email": [
-      { "address": "alerts@yourcompany.com", "enabled": true }
-    ],
-    "sms": [
-      { "phoneNumber": "+1234567890", "enabled": true }
-    ]
+    "email": [{ "address": "alerts@yourcompany.com", "enabled": true }],
+    "sms": [{ "phoneNumber": "+1234567890", "enabled": true }]
   }
 }
 ```
@@ -120,8 +106,8 @@ PUT /api/agents/:agentId/alerts
 |--------|------|-------------|
 | `enabled` | boolean | Enable/disable the alert type |
 | `threshold` | number | Confidence threshold (0-1) for LLM alerts |
-| `severity` | string | 'low', 'warning', 'high', 'critical' |
-| `channels` | array | Notification channels ('email', 'sms') |
+| `severity` | string | `low`, `warning`, `high`, `critical` |
+| `channels` | array | Notification channels (`email`, `sms`) |
 | `cooldownMinutes` | number | Minimum time between alerts |
 
 ## Alert Severity
@@ -135,60 +121,14 @@ PUT /api/agents/:agentId/alerts
 
 ## Alert Lifecycle
 
-Alerts follow an incident-based model:
-
 ```
-1. Detection
-   └── Alert created with status: "open"
-
-2. Accumulation
-   └── Same alert type increments occurrence count
-
-3. Acknowledgment
-   └── User acknowledges, status: "acknowledged"
-
-4. Resolution
-   └── Issue resolved, status: "resolved"
+1. Detection     → Alert created with status: "open"
+2. Accumulation  → Same alert type increments occurrence count
+3. Acknowledgment → User acknowledges, status: "acknowledged"
+4. Resolution    → Issue resolved, status: "resolved"
 ```
 
-### Acknowledging Alerts
-
-```bash
-PUT /api/spans/alerts/:alertId/acknowledge
-{
-  "resolution": "acknowledged"
-}
-```
-
-### Reopening Alerts
-
-```bash
-PUT /api/spans/alerts/:alertId/reopen
-```
-
-## Notification Channels
-
-### Email
-
-Requires SendGrid configuration:
-
-```bash
-# foil-ingestion/.env
-SENDGRID_API_KEY=SG.xxx
-SENDGRID_FROM_EMAIL=alerts@yourcompany.com
-SENDGRID_ALERT_TEMPLATE_ID=d-xxx  # Optional: for styled emails
-```
-
-### SMS
-
-Requires Twilio configuration:
-
-```bash
-# foil-ingestion/.env
-TWILIO_ACCOUNT_SID=xxx
-TWILIO_AUTH_TOKEN=xxx
-TWILIO_FROM_NUMBER=+1234567890
-```
+Email and SMS notifications are configured in the Foil dashboard.
 
 ## Rate Limiting
 
@@ -197,52 +137,6 @@ To prevent alert fatigue, Foil implements rate limiting:
 - **Cooldown period**: Minimum time between notifications for the same alert type
 - **Default**: 5 minutes
 - **Configurable**: Per alert type in agent settings
-
-```json
-{
-  "hallucination": {
-    "cooldownMinutes": 10  // Wait 10 minutes between notifications
-  }
-}
-```
-
-## Viewing Alerts
-
-### Dashboard
-
-The Alerts page shows:
-- Active alerts by agent
-- Alert history
-- Occurrence details
-- Resolution status
-
-### API
-
-```bash
-# List all alerts
-GET /api/spans/alerts
-
-# Get alerts summary by agent
-GET /api/spans/alerts/summary
-
-# Get specific alert with occurrences
-GET /api/spans/alerts/:alertId
-
-# Get alerts for a specific trace
-GET /api/spans/traces/:traceId/alerts
-```
-
-## Testing Alerts
-
-Send a test alert to verify configuration:
-
-```bash
-POST /v1/alerts/test
-{
-  "channel": "email",
-  "alertType": "hallucination"
-}
-```
 
 ## Best Practices
 

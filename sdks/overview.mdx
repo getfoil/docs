@@ -40,7 +40,7 @@ The JavaScript SDK is our most full-featured SDK, designed for complex AI applic
 npm install @getfoil/foil-js
 ```
 
-<Card title="JavaScript SDK Docs" icon="js" href="/sdks/javascript/installation">
+<Card title="JavaScript SDK Docs" icon="js" href="/sdks/javascript/index">
   Complete JavaScript SDK documentation
 </Card>
 
@@ -54,21 +54,27 @@ import { Foil } from '@getfoil/foil-js';
 const foil = new Foil({
   apiKey: 'your-api-key',
   agentName: 'my-agent',
+  instrumentModules: { openAI: OpenAI },
 });
 
 await foil.trace(async (ctx) => {
-  // LLM call with automatic span creation
-  const response = await ctx.llmCall('gpt-4o', async () => {
-    return await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages,
-    });
+  const messages = [{ role: 'user', content: 'Search for recent news' }];
+
+  // LLM calls are auto-instrumented
+  let response = await openai.chat.completions.create({
+    model: 'gpt-4o', messages, tools,
   });
 
-  // Tool calls nest under the trace automatically
-  await ctx.tool('search', async () => {
-    return await searchAPI(query);
-  });
+  // Agentic loop — LLM decides which tools to call
+  while (response.choices[0].message.tool_calls) {
+    const toolMessages = await ctx.executeTools(response, toolMap);
+    messages.push(response.choices[0].message, ...toolMessages);
+    response = await openai.chat.completions.create({
+      model: 'gpt-4o', messages, tools,
+    });
+  }
+
+  return response.choices[0].message.content;
 });
 ```
 
@@ -94,7 +100,7 @@ The Python SDK provides tracing, logging, and feedback collection for Python app
 pip install foil-sdk
 ```
 
-<Card title="Python SDK Docs" icon="python" href="/sdks/python/installation">
+<Card title="Python SDK Docs" icon="python" href="/sdks/python/index">
   Complete Python SDK documentation
 </Card>
 

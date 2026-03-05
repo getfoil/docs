@@ -100,7 +100,7 @@ This guide will get you from zero to traced AI calls in under 5 minutes.
     ```
   </Tab>
   <Tab title="JavaScript (Auto-Instrumentation)">
-    With auto-instrumentation, your LLM calls are traced automatically — no wrapping needed.
+    Auto-instrumentation traces LLM calls automatically. Combine with `ctx.executeTools()` for agentic tool calling:
 
     ```javascript
     const OpenAI = require('openai');
@@ -112,16 +112,49 @@ This guide will get you from zero to traced AI calls in under 5 minutes.
       instrumentModules: { openAI: OpenAI },
     });
 
-    // Use OpenAI as normal — it's automatically traced!
     const openai = new OpenAI();
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: 'What is the capital of France?' }],
-    });
+    // Define tools the LLM can call
+    const tools = [{
+      type: 'function',
+      function: {
+        name: 'get_capital',
+        description: 'Get the capital city of a country',
+        parameters: {
+          type: 'object',
+          properties: { country: { type: 'string' } },
+          required: ['country'],
+        },
+      },
+    }];
 
-    console.log(response.choices[0].message.content); // "Paris"
-    // ↑ This call was automatically traced to Foil!
+    const toolMap = {
+      get_capital: async (args) => ({ capital: 'Paris', country: args.country }),
+    };
+
+    const result = await foil.trace(async (ctx) => {
+      const messages = [{ role: 'user', content: 'What is the capital of France?' }];
+
+      // LLM call is auto-traced — no wrapper needed
+      let response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages,
+        tools,
+      });
+
+      // LLM decides to call tools — executeTools traces each one
+      while (response.choices[0].message.tool_calls) {
+        const toolMessages = await ctx.executeTools(response, toolMap);
+        messages.push(response.choices[0].message, ...toolMessages);
+        response = await openai.chat.completions.create({
+          model: 'gpt-4o', messages, tools,
+        });
+      }
+
+      return response.choices[0].message.content;
+    }, { name: 'capital-query' });
+
+    console.log(result);
     await foil.shutdown();
     ```
   </Tab>
@@ -163,10 +196,10 @@ You'll see:
 ## What's Next?
 
 <CardGroup cols={2}>
-  <Card title="JavaScript Quickstart" icon="js" href="/sdks/javascript/quickstart">
+  <Card title="JavaScript SDK" icon="js" href="/sdks/javascript/index">
     Nested spans, tools, signals, and feedback
   </Card>
-  <Card title="Auto-Instrumentation" icon="circle-nodes" href="/sdks/javascript/auto-instrumentation">
+  <Card title="Auto-Instrumentation" icon="circle-nodes" href="/sdks/javascript/index#auto-instrumentation">
     Zero-code tracing for supported providers
   </Card>
   <Card title="Set Up Alerts" icon="bell" href="/features/alerting">
@@ -183,7 +216,7 @@ You'll see:
 
 ## Complete Example
 
-Here's a full working example with nested tool calls:
+Here's a full working example with an agentic tool-calling loop — the LLM decides which tools to call:
 
 <Tabs>
   <Tab title="JavaScript">
@@ -196,43 +229,74 @@ Here's a full working example with nested tool calls:
     const foil = new Foil({
       apiKey: process.env.FOIL_API_KEY,
       agentName: 'quickstart-agent',
+      instrumentModules: { openAI: OpenAI },
     });
 
+    // Define tools the LLM can call
+    const tools = [{
+      type: 'function',
+      function: {
+        name: 'web_search',
+        description: 'Search the web for information',
+        parameters: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        },
+      },
+    }];
+
+    // Map tool names to implementations
+    const toolMap = {
+      web_search: async (args) => {
+        // Replace with your actual search implementation
+        return { results: [`Top result for "${args.query}": Paris is the capital of France...`] };
+      },
+    };
+
     async function main() {
-      await foil.trace(async (ctx) => {
-        // LLM call with nested tool execution
-        const response = await ctx.llmCall('gpt-4o', async () => {
-          return await openai.chat.completions.create({
+      const result = await foil.trace(async (ctx) => {
+        const messages = [
+          { role: 'system', content: 'You are a helpful research assistant. Use the web_search tool to find information before answering.' },
+          { role: 'user', content: 'What are the top attractions in Paris?' },
+        ];
+
+        // LLM calls are auto-instrumented, no ctx.llmCall() needed
+        let response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages,
+          tools,
+        });
+
+        // Agentic loop — LLM decides which tools to call
+        while (response.choices[0].message.tool_calls) {
+          const toolMessages = await ctx.executeTools(response, toolMap);
+          messages.push(response.choices[0].message, ...toolMessages);
+
+          response = await openai.chat.completions.create({
             model: 'gpt-4o',
-            messages: [
-              { role: 'system', content: 'You are a helpful assistant.' },
-              { role: 'user', content: 'Search for info about Paris and summarize it.' },
-            ],
+            messages,
+            tools,
           });
-        });
+        }
 
-        // Tool calls nest under the trace
-        const searchResults = await ctx.tool('web-search', async () => {
-          return await searchAPI('Paris');
-        });
+        return response.choices[0].message.content;
+      }, { name: 'paris-research' });
 
-        // Second LLM call to synthesize
-        const summary = await ctx.llmCall('gpt-4o', async () => {
-          return await openai.chat.completions.create({
-            model: 'gpt-4o',
-            messages: [
-              { role: 'user', content: `Summarize: ${searchResults}` },
-            ],
-          });
-        });
-
-        console.log(summary.choices[0].message.content);
-      }, { name: 'search-and-summarize' });
-
+      console.log(result);
       await foil.shutdown();
     }
 
     main();
+    ```
+
+    This produces a span tree like:
+
+    ```
+    Trace: paris-research
+    ├── llm (gpt-4o) — auto-captured, returns tool_calls
+    │   └── tool (web_search) — via ctx.executeTools()
+    └── llm (gpt-4o) — auto-captured, final answer
     ```
 
     Run it:

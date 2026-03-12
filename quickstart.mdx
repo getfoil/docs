@@ -13,6 +13,30 @@ This guide will get you from zero to traced AI calls in under 5 minutes.
 - An API key from the Foil dashboard
 - Node.js 18+ or Python 3.8+
 
+## Option A: Use the Foil Wizard (Recommended)
+
+The fastest way to integrate. The Foil Wizard is an AI agent that scans your codebase and automatically adds Foil instrumentation.
+
+```bash
+npx @getfoil/wizard
+```
+
+<Note>
+  The wizard edits your source files. We recommend running it on a separate branch.
+</Note>
+
+The wizard will install the SDK, identify your LLM calls and agent patterns, and add tracing automatically. Review the changes, test, and merge when you're happy.
+
+<Card title="Wizard Documentation" icon="wand-magic-sparkles" href="/features/wizard">
+  Full guide on what the wizard instruments, troubleshooting, and rate limits
+</Card>
+
+---
+
+## Option B: Manual Integration
+
+Prefer to wire things up yourself? Follow the steps below.
+
 ## Step 1: Install the SDK
 
 <Tabs>
@@ -196,6 +220,9 @@ You'll see:
 ## What's Next?
 
 <CardGroup cols={2}>
+  <Card title="Foil Wizard" icon="wand-magic-sparkles" href="/features/wizard">
+    AI-powered automatic instrumentation
+  </Card>
   <Card title="JavaScript SDK" icon="js" href="/sdks/javascript/index">
     Nested spans, tools, signals, and feedback
   </Card>

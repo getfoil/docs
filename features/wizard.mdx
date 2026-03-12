@@ -1,0 +1,93 @@
+---
+title: Foil Wizard
+description: AI-powered CLI tool that automatically instruments your codebase with Foil tracing
+---
+
+# Foil Wizard
+
+The Foil Wizard is an AI-powered CLI tool that analyzes your codebase and automatically adds Foil instrumentation. Instead of manually wrapping every LLM call and agent workflow, the wizard reads your code, understands your architecture, and writes the integration for you.
+
+## How It Works
+
+The wizard is built on the [Claude Agent SDK](https://docs.anthropic.com/en/docs/agents). When you run it, an AI agent:
+
+1. Scans your project structure and identifies LLM calls, agent loops, and tool usage
+2. Determines the best instrumentation strategy (manual spans vs auto-instrumentation)
+3. Installs the Foil SDK
+4. Modifies your source files to add tracing
+5. Verifies the integration works
+
+The wizard runs locally in your terminal. It uses your Foil API key to authenticate — no separate AI API key is required.
+
+<Warning>
+  **The wizard edits your source files.** Always create a new branch before running it so you can review the changes and revert if needed.
+</Warning>
+
+## Prerequisites
+
+- A Foil account with an API key
+- Node.js 18+ installed
+
+## Usage
+
+```bash
+npx @getfoil/wizard
+```
+
+<Note>
+  The wizard edits your source files. We recommend running it on a separate branch.
+</Note>
+
+You'll be prompted for your Foil API key if it's not already set as `FOIL_API_KEY` in your environment.
+
+When it's done, review the changes with `git diff`. The wizard will have:
+
+- Installed `@getfoil/foil-js` (or `foil-sdk` for Python projects)
+- Added Foil initialization at your app's entry point
+- Wrapped LLM calls with tracing spans
+- Added tool call instrumentation if applicable
+- Set up proper shutdown handling
+
+Run your application to verify traces appear in the [Foil Dashboard](https://app.getfoil.ai), then merge when you're happy.
+
+## What the Wizard Instruments
+
+The wizard detects and instruments:
+
+| Pattern | What It Does |
+|---------|-------------|
+| **OpenAI SDK calls** | Wraps with auto-instrumentation or manual `ctx.llmCall()` spans |
+| **Anthropic SDK calls** | Adds tracing spans around message creation |
+| **Agent loops** | Creates parent agent spans with nested LLM and tool spans |
+| **Tool/function calls** | Instruments tool execution with `ctx.executeTools()` |
+| **Multi-file agents** | Follows imports to trace across files |
+
+## Rate Limits
+
+The wizard is rate-limited to 5 sessions per hour per user. Each session makes approximately 10-30 AI calls depending on the size of your codebase.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Wizard made incorrect changes">
+    Since you're on a separate branch, you can reset the changes and try again:
+    ```bash
+    git checkout -- .
+    npx @getfoil/wizard
+    ```
+  </Accordion>
+  <Accordion title="Wizard times out">
+    Large codebases may cause the wizard to hit the 5-minute timeout on individual steps. Try running it from a subdirectory containing your main application code:
+    ```bash
+    cd src/
+    npx @getfoil/wizard
+    ```
+  </Accordion>
+  <Accordion title="Rate limit exceeded">
+    The wizard allows 5 sessions per hour. Wait for the rate limit to reset, or integrate manually using the [Quickstart guide](/quickstart).
+  </Accordion>
+</AccordionGroup>
+
+## Manual Integration
+
+If you prefer to integrate manually or the wizard doesn't support your setup, follow the [Quickstart guide](/quickstart) for step-by-step SDK integration.

@@ -79,6 +79,25 @@ FOIL_DEBUG=true
 
 Debug output shows span start/end events with IDs, nesting depth visualization, timing information, and API call results.
 
+## Wizard
+
+The Foil wizard automatically instruments your project. It scans your code, detects LLM providers and application patterns, then adds the right tracing setup.
+
+```bash
+npx @getfoil/foil-js wizard
+```
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `--agent-name <name>` | Agent name (defaults to package.json name) |
+| `--api-key <key>` | Foil API key (or set `FOIL_API_KEY` env var) |
+| `--dir <path>` | Target directory (defaults to cwd) |
+| `--dry-run` | Preview changes without writing files |
+
+The wizard creates a `foil.js` (or `foil.mjs` for ESM) config file, adds the Foil import to your entry point, and wraps your agent logic with the appropriate tracing pattern.
+
 ## Quick Start
 
 The core concept is the **trace**. A trace represents a complete unit of work (like handling a user request) and contains one or more **spans** (individual operations like LLM calls, tool executions, or retrieval steps).

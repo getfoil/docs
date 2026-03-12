@@ -1,0 +1,19 @@
+# Foil
+
+> Foil is an observability platform for AI agents. Add distributed tracing, real-time alerting, evaluations, and analytics to your LLM-powered applications with 3 lines of code.
+
+## Docs
+
+- [Full Integration Guide](https://docs.getfoil.ai/llms-full.txt): Complete SDK integration reference in plain text — everything a coding agent needs
+- [JavaScript SDK](https://docs.getfoil.ai/sdks/javascript/index): Full JavaScript SDK docs
+- [Python SDK](https://docs.getfoil.ai/sdks/python/index): Full Python SDK docs
+- [Quickstart](https://docs.getfoil.ai/quickstart): 5-minute getting started guide
+- [Vercel AI SDK](https://docs.getfoil.ai/sdks/javascript/vercel-ai): Vercel AI integration
+- [SDK Overview](https://docs.getfoil.ai/sdks/overview): Feature comparison
+
+## Optional
+
+- [Traces & Spans](https://docs.getfoil.ai/concepts/traces-and-spans)
+- [Signals & Feedback](https://docs.getfoil.ai/concepts/signals)
+- [Alerting](https://docs.getfoil.ai/features/alerting)
+- [API Reference](https://docs.getfoil.ai/api-reference/introduction)
